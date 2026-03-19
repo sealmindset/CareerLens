@@ -1,0 +1,171 @@
+{
+  "project_name": "CareerLens",
+  "purpose": "AI-powered job application assistant that reads job descriptions, tailors resumes to match employer language while maintaining authenticity, auto-fills job applications via Playwright, and tracks the entire application lifecycle with specialized AI agents",
+  "project_type": "web-app",
+  "active_tiers": [0, 1],
+  "scaffold": "fastapi-nextjs",
+  "features": [
+    "Profile builder (upload resume PDF/Word, paste LinkedIn, manual entry) stored in RAG/CAG",
+    "Job listing analyzer (paste URLs, Playwright scrapes JD)",
+    "Scout Agent - finds and analyzes job matches",
+    "Tailor Agent - rewrites resume in employer language while staying authentic",
+    "Coach Agent - interviews user to uncover hidden experience and fill gaps",
+    "Strategist Agent - positions personal brand for each role",
+    "Brand Advisor Agent - researches company culture and values",
+    "Coordinator Agent - fills application forms via Playwright with review/auto-submit choice",
+    "Application pipeline tracker (status, notes, follow-up reminders)",
+    "Gap analysis between JD and resume with AI interview",
+    "Skills inventory that grows over time from gap interviews"
+  ],
+  "users": {
+    "description": "Individual job seekers and their friends",
+    "types": ["Super Admin", "Admin", "Pro User", "User"],
+    "estimated_count": "10-100",
+    "internal_or_external": "external"
+  },
+  "auth": {
+    "needed": true,
+    "provider": "oidc",
+    "token_expiry": "8 hours"
+  },
+  "roles": [
+    {
+      "name": "Super Admin",
+      "description": "Full system access, can create custom roles and manage all users"
+    },
+    {
+      "name": "Admin",
+      "description": "Manage settings and users, cannot manage roles"
+    },
+    {
+      "name": "Pro User",
+      "description": "All features including auto-submit and multiple active job searches"
+    },
+    {
+      "name": "User",
+      "description": "Standard access to core features"
+    }
+  ],
+  "stack": {
+    "frontend": "Next.js 15 + Tailwind CSS",
+    "backend": "FastAPI (Python)",
+    "database": "PostgreSQL 16",
+    "orm": "SQLAlchemy + Alembic",
+    "validation": "Pydantic",
+    "auth_tokens": "stateless-jwt",
+    "language": "Python + TypeScript",
+    "build_tool": "Docker Compose",
+    "runtime": "Python 3.12 + Node 20"
+  },
+  "app_type": "AI-powered web application",
+  "multi_tenancy": {
+    "needed": false,
+    "tenant_type": ""
+  },
+  "ai_features": {
+    "needed": true,
+    "description": "6 specialized AI agents for different aspects of the job search journey",
+    "usage_level": "heavy",
+    "prompt_count_estimate": 12,
+    "prompts": [
+      "scout_analyze_job",
+      "scout_match_profile",
+      "tailor_rewrite_resume",
+      "tailor_highlight_alignment",
+      "coach_gap_interview",
+      "coach_update_profile",
+      "strategist_position_brand",
+      "strategist_cover_letter",
+      "brand_advisor_research",
+      "brand_advisor_culture_fit",
+      "coordinator_fill_form",
+      "coordinator_parse_application"
+    ],
+    "agents": [
+      {"name": "Scout", "model_tier": "standard", "description": "Analyzes job listings, identifies best matches"},
+      {"name": "Tailor", "model_tier": "heavy", "description": "Rewrites resume in employer language"},
+      {"name": "Coach", "model_tier": "heavy", "description": "Interviews user to uncover hidden experience"},
+      {"name": "Strategist", "model_tier": "heavy", "description": "Positions personal brand for each role"},
+      {"name": "Brand Advisor", "model_tier": "standard", "description": "Researches company culture and values"},
+      {"name": "Coordinator", "model_tier": "light", "description": "Fills application forms, tracks pipeline"}
+    ],
+    "who_edits_prompts": "developers",
+    "prompt_management_tier": 2
+  },
+  "ai_providers": {
+    "needed": true,
+    "primary": "anthropic_foundry",
+    "fallback": "",
+    "model_tiers": {
+      "heavy": "claude-opus-4-6",
+      "standard": "claude-sonnet-4-6",
+      "light": "claude-haiku-4-5"
+    },
+    "provider_config": {
+      "anthropic_foundry": {
+        "endpoint": "",
+        "uses_managed_identity": false
+      }
+    }
+  },
+  "nemo_guardrails": {
+    "enabled": true,
+    "version": "latest",
+    "attestation_mode": "snapshot",
+    "categories": [
+      "prompt_injection",
+      "jailbreak",
+      "toxicity_bias",
+      "topic_boundaries",
+      "pii_leakage",
+      "hallucination"
+    ],
+    "topic_domain": "job search, resume optimization, career development, and job application management",
+    "last_run": "",
+    "last_result": ""
+  },
+  "compliance": [],
+  "special_features": ["playwright_web_scraping", "rag_resume_storage", "form_auto_fill"],
+  "mock_services": {
+    "mock_oidc": {
+      "needed": true,
+      "host_port": 10190,
+      "container_port": 10090,
+      "test_users": [
+        {"sub": "mock-admin", "email": "admin@career-lens.local", "name": "Admin User", "role": "Super Admin"},
+        {"sub": "mock-manager", "email": "manager@career-lens.local", "name": "Manager User", "role": "Admin"},
+        {"sub": "mock-pro", "email": "pro@career-lens.local", "name": "Pro User", "role": "Pro User"},
+        {"sub": "mock-user", "email": "user@career-lens.local", "name": "Regular User", "role": "User"}
+      ]
+    },
+    "custom_mocks": []
+  },
+  "integrations": [],
+  "cloud": {
+    "provider": "azure",
+    "region": "",
+    "cli_authenticated": false
+  },
+  "deployment": {
+    "target": "azure",
+    "containerize": true,
+    "prototype_only": false
+  },
+  "security_scanner": {
+    "type": "",
+    "api_url": "",
+    "uses_github_issues": false
+  },
+  "pages": [
+    "dashboard",
+    "profile",
+    "jobs",
+    "applications",
+    "agents",
+    "settings",
+    "admin/users",
+    "admin/roles"
+  ],
+  "prompts_to_run": [1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14],
+  "skipped_guardrails": {}
+}
