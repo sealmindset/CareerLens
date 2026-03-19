@@ -4,16 +4,32 @@ from app.config import settings
 
 
 class AnthropicFoundryProvider(AIProvider):
+    """Azure AI Foundry provider using DefaultAzureCredential (no API key needed)."""
+
     def __init__(self):
         self.endpoint = settings.AZURE_AI_FOUNDRY_ENDPOINT
-        self.api_key = settings.AZURE_AI_FOUNDRY_API_KEY
+        self._credential = None
+        self._token = None
+
+    def _get_credential(self):
+        if self._credential is None:
+            from azure.identity import DefaultAzureCredential
+
+            self._credential = DefaultAzureCredential()
+        return self._credential
+
+    def _get_token(self) -> str:
+        """Get a bearer token via DefaultAzureCredential."""
+        credential = self._get_credential()
+        token = credential.get_token("https://cognitiveservices.azure.com/.default")
+        return token.token
 
     async def complete(self, system_prompt, user_prompt, model=None, temperature=0.7, max_tokens=4096):
         model = model or settings.AI_MODEL_STANDARD
         url = f"{self.endpoint}/models/chat/completions"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self._get_token()}",
         }
         body = {
             "model": model,
@@ -31,6 +47,5 @@ class AnthropicFoundryProvider(AIProvider):
             return data["choices"][0]["message"]["content"]
 
     async def stream(self, system_prompt, user_prompt, model=None, temperature=0.7, max_tokens=4096):
-        # Simplified - yields complete response for now
         result = await self.complete(system_prompt, user_prompt, model, temperature, max_tokens)
         yield result

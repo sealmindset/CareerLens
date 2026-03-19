@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     AI_MODEL_LIGHT: str = "claude-haiku-4-5"
 
     # Azure AI Foundry (when AI_PROVIDER=anthropic_foundry)
+    # Uses DefaultAzureCredential (managed identity / Azure CLI) -- no API key needed
     AZURE_AI_FOUNDRY_ENDPOINT: str = ""
-    AZURE_AI_FOUNDRY_API_KEY: str = ""
 
     # Direct Anthropic (when AI_PROVIDER=anthropic)
     ANTHROPIC_API_KEY: str = ""

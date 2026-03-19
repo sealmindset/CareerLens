@@ -6,4 +6,5 @@ alembic
 pydantic-settings
 PyJWT
 httpx
+azure-identity
 python-multipart

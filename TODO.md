@@ -1,7 +1,7 @@
 # TODO
 
 ## High Priority
-- [ ] Configure AI provider API key (ANTHROPIC_API_KEY, OPENAI_API_KEY, or AZURE_AI_FOUNDRY_*) for real AI responses
+- [ ] Set AZURE_AI_FOUNDRY_ENDPOINT in .env (uses DefaultAzureCredential -- no API key needed)
 - [ ] Implement Playwright web scraping for job listing URLs
 - [ ] Implement resume PDF/Word upload and parsing
 - [ ] Implement LinkedIn profile import
