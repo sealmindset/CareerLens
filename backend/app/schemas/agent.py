@@ -19,8 +19,8 @@ class MessageOut(BaseModel):
 
 
 class ConversationCreate(BaseModel):
-    agent_name: str
-    context_type: str
+    agent_name: str | None = None
+    context_type: str = "general"
     context_id: uuid.UUID | None = None
 
 

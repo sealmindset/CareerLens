@@ -1,8 +1,8 @@
 # TODO
 
 ## High Priority
+- [ ] Configure AI provider API key (ANTHROPIC_API_KEY, OPENAI_API_KEY, or AZURE_AI_FOUNDRY_*) for real AI responses
 - [ ] Implement Playwright web scraping for job listing URLs
-- [ ] Connect AI agents to actual AI provider (currently placeholder responses)
 - [ ] Implement resume PDF/Word upload and parsing
 - [ ] Implement LinkedIn profile import
 - [ ] Build RAG/CAG system for resume content storage and retrieval
@@ -18,7 +18,6 @@
 - [ ] Implement application follow-up reminders (email/notification)
 - [ ] Add resume version history per application
 - [ ] NeMo Guardrails AI safety testing suite
-- [ ] AI prompt management admin UI (Tier 2)
 
 ## Low Priority
 - [ ] Add job search capability (active job discovery)

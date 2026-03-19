@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -5,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.agent_service import generate_agent_response
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.middleware.permissions import require_permission
@@ -12,6 +14,8 @@ from app.models.agent_conversation import AgentConversation, AgentMessage
 from app.models.user import User
 from app.schemas.agent import ConversationCreate, ConversationOut, MessageCreate, MessageOut
 from app.schemas.auth import UserInfo
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -159,16 +163,20 @@ async def send_message(
         content=data.content,
     )
     db.add(user_message)
+    await db.flush()
 
-    # Placeholder AI response
+    # Generate AI response
+    ai_content = await generate_agent_response(
+        db=db,
+        agent_name=conversation.agent_name,
+        conversation_id=str(conv_id),
+        user_message=data.content,
+    )
+
     ai_message = AgentMessage(
         conversation_id=conv_id,
         role="assistant",
-        content=(
-            f"[Placeholder] I'm the {conversation.agent_name} agent. "
-            f"In production, I will process your message using AI. "
-            f"You said: {data.content}"
-        ),
+        content=ai_content,
     )
     db.add(ai_message)
 

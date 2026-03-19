@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, permissions, roles, users
+from app.routers import auth, permissions, roles, users, prompts
 from app.routers import profile, jobs, applications, agents, dashboard
 from app.routers import settings as settings_router
 
@@ -33,6 +33,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(roles.router)
 app.include_router(permissions.router)
+app.include_router(prompts.router)
 
 # Domain routers
 app.include_router(profile.router)

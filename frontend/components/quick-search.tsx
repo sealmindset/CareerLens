@@ -57,6 +57,12 @@ const navigationItems: SearchItem[] = [
     keywords: ["roles", "permissions", "admin"],
     permission: { resource: "roles", action: "view" },
   },
+  {
+    label: "Prompt Management",
+    href: "/admin/prompts",
+    keywords: ["prompts", "ai", "system", "templates", "admin"],
+    permission: { resource: "prompts", action: "view" },
+  },
 ];
 
 export function QuickSearch() {

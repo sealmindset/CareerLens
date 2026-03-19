@@ -151,6 +151,39 @@ export interface AgentMessage {
   created_at: string;
 }
 
+export interface ManagedPrompt {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  category: string;
+  agent_name: string | null;
+  content: string;
+  model_tier: string;
+  temperature: number;
+  max_tokens: number;
+  is_active: boolean;
+  status: string;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+  version_count: number;
+}
+
+export interface ManagedPromptDetail extends ManagedPrompt {
+  versions: PromptVersion[];
+}
+
+export interface PromptVersion {
+  id: string;
+  prompt_id: string;
+  version: number;
+  content: string;
+  change_summary: string | null;
+  changed_by: string | null;
+  created_at: string;
+}
+
 export interface DashboardStats {
   total_jobs: number;
   active_applications: number;

@@ -15,6 +15,7 @@ import {
   Bot,
   UserCircle,
   Settings,
+  MessageSquareCode,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -76,6 +77,12 @@ const adminNavItems: NavItem[] = [
     href: "/admin/roles",
     icon: Shield,
     permission: { resource: "roles", action: "view" },
+  },
+  {
+    label: "Prompts",
+    href: "/admin/prompts",
+    icon: MessageSquareCode,
+    permission: { resource: "prompts", action: "view" },
   },
 ];
 

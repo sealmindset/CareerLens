@@ -15,7 +15,7 @@ agent_name_enum = sa.Enum(
 )
 
 context_type_enum = sa.Enum(
-    "job_analysis", "resume_tailoring", "gap_interview", "brand_research", "form_filling",
+    "job_analysis", "resume_tailoring", "gap_interview", "brand_research", "form_filling", "general",
     name="context_type",
     create_type=True,
 )

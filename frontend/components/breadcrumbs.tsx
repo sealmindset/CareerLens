@@ -15,6 +15,7 @@ const segmentLabels: Record<string, string> = {
   admin: "Admin",
   users: "Users",
   roles: "Roles",
+  prompts: "Prompts",
 };
 
 function formatSegment(segment: string): string {
