@@ -4,7 +4,16 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatRelative } from "@/lib/utils";
-import type { AgentConversation, AgentMessage } from "@/lib/types";
+import type {
+  AgentConversation,
+  AgentMessage,
+  AgentWorkspace,
+  Application,
+  PreflightResult,
+  AgentTaskResult,
+  PipelineRun,
+  WorkspaceArtifact,
+} from "@/lib/types";
 import {
   Search,
   Scissors,
@@ -17,10 +26,19 @@ import {
   Loader2,
   MessageSquare,
   ChevronLeft,
+  Briefcase,
+  Play,
+  Zap,
+  CheckCircle2,
+  AlertCircle,
+  Circle,
+  FileText,
+  ChevronRight,
 } from "lucide-react";
 
 interface AgentDef {
   name: string;
+  key: string;
   icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   description: string;
   modelTier: string;
@@ -30,6 +48,7 @@ interface AgentDef {
 const agents: AgentDef[] = [
   {
     name: "Scout",
+    key: "scout",
     icon: Search,
     description: "Analyzes job listings against your profile, identifies matches, and discovers opportunities.",
     modelTier: "standard",
@@ -37,6 +56,7 @@ const agents: AgentDef[] = [
   },
   {
     name: "Tailor",
+    key: "tailor",
     icon: Scissors,
     description: "Rewrites your resume and cover letter to match the job listing language authentically.",
     modelTier: "premium",
@@ -44,6 +64,7 @@ const agents: AgentDef[] = [
   },
   {
     name: "Coach",
+    key: "coach",
     icon: GraduationCap,
     description: "Prepares you for interviews with practice questions and feedback on your answers.",
     modelTier: "standard",
@@ -51,26 +72,31 @@ const agents: AgentDef[] = [
   },
   {
     name: "Strategist",
+    key: "strategist",
     icon: Target,
-    description: "Advises on career moves, salary negotiation, and long-term career planning.",
+    description: "Generates cover letters and develops application strategies with follow-up plans.",
     modelTier: "premium",
     color: "rgb(234,179,8)",
   },
   {
     name: "Brand Advisor",
+    key: "brand_advisor",
     icon: Building,
-    description: "Improves your LinkedIn profile, online presence, and personal brand strategy.",
+    description: "Researches target companies and aligns your personal brand to their culture.",
     modelTier: "standard",
     color: "rgb(236,72,153)",
   },
   {
     name: "Coordinator",
+    key: "coordinator",
     icon: ClipboardList,
-    description: "Orchestrates the application process: fills forms, tracks deadlines, manages follow-ups.",
+    description: "Orchestrates the full application: checklists, timelines, and follow-up plans.",
     modelTier: "premium",
     color: "rgb(249,115,22)",
   },
 ];
+
+const agentByKey = Object.fromEntries(agents.map((a) => [a.key, a]));
 
 const tierBadge = (tier: string) => {
   const isP = tier === "premium";
@@ -87,8 +113,19 @@ const tierBadge = (tier: string) => {
   );
 };
 
+const statusIcon = (status: string) => {
+  if (status === "ready") return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+  if (status === "missing") return <AlertCircle className="h-4 w-4 text-red-500" />;
+  return <Circle className="h-4 w-4 text-yellow-500" />;
+};
+
+type ViewMode = "grid" | "chat" | "workspace";
+
 export default function AgentsPage() {
   const { hasPermission } = useAuth();
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+
+  // Chat state
   const [activeAgent, setActiveAgent] = useState<AgentDef | null>(null);
   const [conversations, setConversations] = useState<AgentConversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<AgentConversation | null>(null);
@@ -100,7 +137,19 @@ export default function AgentsPage() {
   const [showConvoSidebar, setShowConvoSidebar] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Workspace state
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState<AgentWorkspace | null>(null);
+  const [preflights, setPreflights] = useState<PreflightResult[]>([]);
+  const [runningAgent, setRunningAgent] = useState<string | null>(null);
+  const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [taskResult, setTaskResult] = useState<AgentTaskResult | null>(null);
+  const [selectedArtifact, setSelectedArtifact] = useState<WorkspaceArtifact | null>(null);
+  const [loadingWorkspace, setLoadingWorkspace] = useState(false);
+
   const canChat = hasPermission("agents", "chat") || hasPermission("agents", "view");
+  const canWorkspace = hasPermission("workspace", "create") || hasPermission("workspace", "view");
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -110,13 +159,23 @@ export default function AgentsPage() {
     scrollToBottom();
   }, [messages]);
 
+  // Load applications for workspace mode
+  useEffect(() => {
+    if (viewMode === "workspace" && applications.length === 0) {
+      apiGet<Application[]>("/applications")
+        .then(setApplications)
+        .catch(() => setApplications([]));
+    }
+  }, [viewMode, applications.length]);
+
+  // --- Chat functions ---
+
   const fetchConversations = useCallback(async (agentName: string) => {
     setLoadingConvos(true);
     try {
       const data = await apiGet<AgentConversation[]>(`/agents/${agentName.toLowerCase()}/conversations`);
       setConversations(data);
-    } catch (err) {
-      console.error("Failed to load conversations:", err);
+    } catch {
       setConversations([]);
     } finally {
       setLoadingConvos(false);
@@ -128,8 +187,7 @@ export default function AgentsPage() {
     try {
       const data = await apiGet<AgentMessage[]>(`/agents/conversations/${conversationId}/messages`);
       setMessages(data);
-    } catch (err) {
-      console.error("Failed to load messages:", err);
+    } catch {
       setMessages([]);
     } finally {
       setLoadingMessages(false);
@@ -140,6 +198,7 @@ export default function AgentsPage() {
     setActiveAgent(agent);
     setActiveConversation(null);
     setMessages([]);
+    setViewMode("chat");
     await fetchConversations(agent.name);
   };
 
@@ -169,7 +228,6 @@ export default function AgentsPage() {
     setInput("");
     setSending(true);
 
-    // Optimistic add
     const tempMsg: AgentMessage = {
       id: `temp-${Date.now()}`,
       conversation_id: activeConversation.id,
@@ -184,15 +242,12 @@ export default function AgentsPage() {
         `/agents/conversations/${activeConversation.id}/messages`,
         { content: text },
       );
-      // Replace optimistic with real messages
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== tempMsg.id),
         response.user_message,
         response.assistant_message,
       ]);
-    } catch (err) {
-      console.error("Failed to send message:", err);
-      // Remove optimistic message on error
+    } catch {
       setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
       setInput(text);
     } finally {
@@ -200,15 +255,128 @@ export default function AgentsPage() {
     }
   };
 
-  // Agent grid view
-  if (!activeAgent) {
+  // --- Workspace chat (scoped to application) ---
+
+  const chatWithAgent = async (agent: AgentDef) => {
+    if (!selectedAppId) return;
+    try {
+      const convo = await apiPost<AgentConversation>(
+        `/agents/${agent.key}/conversations`,
+        { context_type: "general", context_id: selectedAppId },
+      );
+      setActiveAgent(agent);
+      setActiveConversation(convo);
+      setMessages([]);
+      await fetchConversations(agent.key);
+      setViewMode("chat");
+    } catch (err) {
+      console.error("Failed to start scoped conversation:", err);
+    }
+  };
+
+  // --- Workspace functions ---
+
+  const loadWorkspace = async (appId: string) => {
+    setSelectedAppId(appId);
+    setLoadingWorkspace(true);
+    setWorkspace(null);
+    setPreflights([]);
+    setTaskResult(null);
+    setSelectedArtifact(null);
+
+    try {
+      // Create or get workspace
+      const ws = await apiPost<AgentWorkspace>("/agents/workspaces", { application_id: appId });
+      setWorkspace(ws);
+
+      // Load preflights for all agents
+      const pf = await apiGet<PreflightResult[]>(`/agents/preflight/all/${appId}`);
+      setPreflights(pf);
+    } catch (err) {
+      console.error("Failed to load workspace:", err);
+    } finally {
+      setLoadingWorkspace(false);
+    }
+  };
+
+  const runAgent = async (agentName: string) => {
+    if (!workspace) return;
+    setRunningAgent(agentName);
+    setTaskResult(null);
+    try {
+      const result = await apiPost<AgentTaskResult>(
+        `/agents/workspaces/${workspace.id}/run-agent`,
+        { agent_name: agentName },
+      );
+      setTaskResult(result);
+
+      // Refresh workspace to get new artifacts
+      const ws = await apiGet<AgentWorkspace>(`/agents/workspaces/${workspace.id}`);
+      setWorkspace(ws);
+
+      // Refresh preflights
+      if (selectedAppId) {
+        const pf = await apiGet<PreflightResult[]>(`/agents/preflight/all/${selectedAppId}`);
+        setPreflights(pf);
+      }
+    } catch (err) {
+      console.error("Agent run failed:", err);
+    } finally {
+      setRunningAgent(null);
+    }
+  };
+
+  const runPipeline = async (type: "full" | "quick") => {
+    if (!workspace) return;
+    setPipelineRunning(true);
+    setTaskResult(null);
+    try {
+      await apiPost<PipelineRun>(
+        `/agents/workspaces/${workspace.id}/pipeline`,
+        { pipeline_type: type },
+      );
+
+      // Refresh workspace
+      const ws = await apiGet<AgentWorkspace>(`/agents/workspaces/${workspace.id}`);
+      setWorkspace(ws);
+
+      // Refresh preflights
+      if (selectedAppId) {
+        const pf = await apiGet<PreflightResult[]>(`/agents/preflight/all/${selectedAppId}`);
+        setPreflights(pf);
+      }
+    } catch (err) {
+      console.error("Pipeline failed:", err);
+    } finally {
+      setPipelineRunning(false);
+    }
+  };
+
+  // ─── Agent grid view ───────────────────────────────────────────────
+
+  if (viewMode === "grid") {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">AI Agents</h1>
-          <p style={{ color: "var(--muted-foreground)" }}>
-            Chat with specialized AI agents to supercharge your job search.
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">AI Agents</h1>
+            <p style={{ color: "var(--muted-foreground)" }}>
+              Chat with agents or run them against a job application for comprehensive deliverables.
+            </p>
+          </div>
+          {canWorkspace && (
+            <button
+              onClick={() => setViewMode("workspace")}
+              className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: "var(--primary)",
+                color: "var(--primary-foreground)",
+              }}
+            >
+              <Briefcase className="h-4 w-4" />
+              Agent Workspace
+            </button>
+          )}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -245,7 +413,312 @@ export default function AgentsPage() {
     );
   }
 
-  // Chat view
+  // ─── Workspace view ────────────────────────────────────────────────
+
+  if (viewMode === "workspace") {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => { setViewMode("grid"); setWorkspace(null); setSelectedAppId(null); }}
+            className="rounded p-1 transition-colors hover:bg-accent"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Agent Workspace</h1>
+            <p style={{ color: "var(--muted-foreground)" }}>
+              Run AI agents against a job application for comprehensive analysis and deliverables.
+            </p>
+          </div>
+        </div>
+
+        {/* Application selector */}
+        {!workspace && (
+          <div
+            className="rounded-xl border p-6"
+            style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+          >
+            <h2 className="font-semibold mb-4">Select a Job Application</h2>
+            {applications.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                No applications yet. Create a job application first from the Applications page.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {applications.map((app) => (
+                  <button
+                    key={app.id}
+                    onClick={() => loadWorkspace(app.id)}
+                    disabled={loadingWorkspace}
+                    className="w-full flex items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-accent"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <Briefcase className="h-5 w-5 shrink-0" style={{ color: "var(--primary)" }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">
+                        {app.job_title || "Untitled"} at {app.job_company || "Unknown"}
+                      </p>
+                      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                        Status: {app.status} &middot; {formatRelative(app.created_at)}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "var(--muted-foreground)" }} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {loadingWorkspace && (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--primary)" }} />
+          </div>
+        )}
+
+        {workspace && (
+          <>
+            {/* Pipeline controls */}
+            <div
+              className="rounded-xl border p-6"
+              style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold">Run Agent Pipeline</h2>
+                <button
+                  onClick={() => { setWorkspace(null); setSelectedAppId(null); }}
+                  className="text-sm underline"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Change application
+                </button>
+              </div>
+              <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
+                Run all agents automatically in sequence, or pick individual agents below.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => runPipeline("full")}
+                  disabled={pipelineRunning || !!runningAgent}
+                  className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                  style={{
+                    backgroundColor: "var(--primary)",
+                    color: "var(--primary-foreground)",
+                  }}
+                >
+                  {pipelineRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                  Full Pipeline
+                </button>
+                <button
+                  onClick={() => runPipeline("quick")}
+                  disabled={pipelineRunning || !!runningAgent}
+                  className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <Zap className="h-4 w-4" />
+                  Quick Pipeline
+                </button>
+              </div>
+              {pipelineRunning && (
+                <p className="text-sm mt-3" style={{ color: "var(--muted-foreground)" }}>
+                  Pipeline running... this may take a few minutes as each agent analyzes your application.
+                </p>
+              )}
+            </div>
+
+            {/* Agent cards with preflight + run buttons */}
+            <div>
+              <h2 className="font-semibold mb-4">Individual Agents</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {agents.map((agent) => {
+                  const pf = preflights.find((p) => p.agent_name === agent.key);
+                  const isRunning = runningAgent === agent.key;
+                  const artifacts = workspace.artifacts.filter((a) => a.agent_name === agent.key);
+
+                  return (
+                    <div
+                      key={agent.key}
+                      className="rounded-xl border p-5"
+                      style={{
+                        backgroundColor: "var(--card)",
+                        borderColor: "var(--border)",
+                      }}
+                    >
+                      <div className="flex items-center gap-3 mb-3">
+                        <div
+                          className="flex h-9 w-9 items-center justify-center rounded-lg"
+                          style={{ backgroundColor: `${agent.color}20`, color: agent.color }}
+                        >
+                          <agent.icon className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-sm">{agent.name}</h3>
+                          {tierBadge(agent.modelTier)}
+                        </div>
+                      </div>
+
+                      {/* Preflight status */}
+                      {pf && (
+                        <div className="mb-3 space-y-1">
+                          {pf.items.slice(0, 3).map((item, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs">
+                              {statusIcon(item.status)}
+                              <span>{item.name}</span>
+                            </div>
+                          ))}
+                          {pf.items.length > 3 && (
+                            <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                              +{pf.items.length - 3} more items
+                            </p>
+                          )}
+                          {pf.items.length === 0 && (
+                            <div className="flex items-center gap-2 text-xs text-green-600">
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span>All data ready</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Existing artifacts */}
+                      {artifacts.length > 0 && (
+                        <div className="mb-3 space-y-1">
+                          {artifacts.map((art) => (
+                            <button
+                              key={art.id}
+                              onClick={() => setSelectedArtifact(art)}
+                              className="flex items-center gap-2 text-xs w-full text-left hover:underline"
+                              style={{ color: "var(--primary)" }}
+                            >
+                              <FileText className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{art.title}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => runAgent(agent.key)}
+                          disabled={isRunning || pipelineRunning}
+                          className="flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 hover:bg-accent"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          {isRunning ? (
+                            <span className="inline-flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" /> Running...
+                            </span>
+                          ) : artifacts.length > 0 ? (
+                            "Re-run Agent"
+                          ) : (
+                            "Run Agent"
+                          )}
+                        </button>
+                        <button
+                          onClick={() => chatWithAgent(agent)}
+                          disabled={pipelineRunning}
+                          className="inline-flex items-center justify-center rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 hover:bg-accent"
+                          style={{ borderColor: "var(--border)" }}
+                          title={`Chat with ${agent.name} about this application`}
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Task result */}
+            {taskResult && (
+              <div
+                className="rounded-xl border p-6"
+                style={{
+                  backgroundColor: "var(--card)",
+                  borderColor: "var(--border)",
+                }}
+              >
+                <h3 className="font-semibold mb-2">Agent Result</h3>
+                <pre className="text-sm whitespace-pre-wrap" style={{ color: "var(--muted-foreground)" }}>
+                  {taskResult.summary}
+                </pre>
+                {taskResult.preflight_warnings.length > 0 && (
+                  <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+                    <p className="text-xs font-medium mb-1">Data suggestions for better results:</p>
+                    {taskResult.preflight_warnings.map((w, i) => (
+                      <p key={i} className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                        &bull; {w.detail || w.description}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {taskResult.next_suggested_agent && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => runAgent(taskResult.next_suggested_agent!)}
+                      disabled={!!runningAgent}
+                      className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+                      style={{
+                        backgroundColor: "var(--primary)",
+                        color: "var(--primary-foreground)",
+                      }}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                      Run {agentByKey[taskResult.next_suggested_agent]?.name || taskResult.next_suggested_agent} next
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Artifact viewer */}
+            {selectedArtifact && (
+              <div
+                className="rounded-xl border p-6"
+                style={{
+                  backgroundColor: "var(--card)",
+                  borderColor: "var(--border)",
+                }}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold">{selectedArtifact.title}</h3>
+                    <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                      By {agentByKey[selectedArtifact.agent_name]?.name || selectedArtifact.agent_name} &middot;
+                      v{selectedArtifact.version} &middot; {formatRelative(selectedArtifact.created_at)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedArtifact(null)}
+                    className="text-sm underline"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    Close
+                  </button>
+                </div>
+                <div
+                  className="prose prose-sm max-w-none rounded-lg border p-4 overflow-auto max-h-[60vh]"
+                  style={{
+                    borderColor: "var(--border)",
+                    backgroundColor: "var(--background)",
+                  }}
+                >
+                  <pre className="whitespace-pre-wrap text-sm font-normal">
+                    {selectedArtifact.content}
+                  </pre>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ─── Chat view ─────────────────────────────────────────────────────
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       {/* Chat header */}
@@ -254,26 +727,30 @@ export default function AgentsPage() {
         style={{ borderColor: "var(--border)" }}
       >
         <button
-          onClick={() => setActiveAgent(null)}
+          onClick={() => { setActiveAgent(null); setViewMode("grid"); }}
           className="rounded p-1 transition-colors hover:bg-accent"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <div
-          className="flex h-8 w-8 items-center justify-center rounded-lg"
-          style={{
-            backgroundColor: `${activeAgent.color}20`,
-            color: activeAgent.color,
-          }}
-        >
-          <activeAgent.icon className="h-4 w-4" />
-        </div>
-        <div className="flex-1">
-          <h2 className="font-semibold text-sm">{activeAgent.name} Agent</h2>
-          <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-            {activeAgent.description.slice(0, 60)}...
-          </p>
-        </div>
+        {activeAgent && (
+          <>
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-lg"
+              style={{
+                backgroundColor: `${activeAgent.color}20`,
+                color: activeAgent.color,
+              }}
+            >
+              <activeAgent.icon className="h-4 w-4" />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-semibold text-sm">{activeAgent.name} Agent</h2>
+              <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                {activeAgent.description.slice(0, 60)}...
+              </p>
+            </div>
+          </>
+        )}
         <button
           onClick={() => setShowConvoSidebar(!showConvoSidebar)}
           className="rounded p-1 transition-colors hover:bg-accent lg:hidden"
@@ -324,7 +801,7 @@ export default function AgentsPage() {
                       <div className="flex items-center gap-2">
                         <MessageSquare className="h-3 w-3 shrink-0" />
                         <span className="truncate">
-                          {convo.context_type}
+                          {convo.context_id ? "Job Chat" : convo.context_type}
                         </span>
                       </div>
                       <span className="text-xs block mt-0.5" style={{ color: "var(--muted-foreground)" }}>
@@ -342,27 +819,29 @@ export default function AgentsPage() {
         <div className="flex flex-1 flex-col overflow-hidden">
           {!activeConversation ? (
             <div className="flex flex-1 items-center justify-center">
-              <div className="text-center">
-                <activeAgent.icon
-                  className="mx-auto h-12 w-12 mb-4"
-                  style={{ color: activeAgent.color }}
-                />
-                <h3 className="font-semibold mb-2">Start a conversation with {activeAgent.name}</h3>
-                <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
-                  Select an existing conversation or start a new one.
-                </p>
-                <button
-                  onClick={startNewConversation}
-                  className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors"
-                  style={{
-                    backgroundColor: "var(--primary)",
-                    color: "var(--primary-foreground)",
-                  }}
-                >
-                  <MessageSquare className="h-4 w-4" />
-                  New Conversation
-                </button>
-              </div>
+              {activeAgent && (
+                <div className="text-center">
+                  <activeAgent.icon
+                    className="mx-auto h-12 w-12 mb-4"
+                    style={{ color: activeAgent.color }}
+                  />
+                  <h3 className="font-semibold mb-2">Start a conversation with {activeAgent.name}</h3>
+                  <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
+                    Select an existing conversation or start a new one.
+                  </p>
+                  <button
+                    onClick={startNewConversation}
+                    className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors"
+                    style={{
+                      backgroundColor: "var(--primary)",
+                      color: "var(--primary-foreground)",
+                    }}
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    New Conversation
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -388,21 +867,13 @@ export default function AgentsPage() {
                         className="max-w-[75%] rounded-xl px-4 py-2.5"
                         style={{
                           backgroundColor:
-                            msg.role === "user"
-                              ? "var(--primary)"
-                              : "var(--accent)",
+                            msg.role === "user" ? "var(--primary)" : "var(--accent)",
                           color:
-                            msg.role === "user"
-                              ? "var(--primary-foreground)"
-                              : "var(--accent-foreground)",
+                            msg.role === "user" ? "var(--primary-foreground)" : "var(--accent-foreground)",
                         }}
                       >
                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                        <p
-                          className="text-xs mt-1 opacity-60"
-                        >
-                          {formatRelative(msg.created_at)}
-                        </p>
+                        <p className="text-xs mt-1 opacity-60">{formatRelative(msg.created_at)}</p>
                       </div>
                     </div>
                   ))
@@ -411,10 +882,7 @@ export default function AgentsPage() {
               </div>
 
               {/* Input */}
-              <div
-                className="border-t p-4"
-                style={{ borderColor: "var(--border)" }}
-              >
+              <div className="border-t p-4" style={{ borderColor: "var(--border)" }}>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
@@ -426,7 +894,7 @@ export default function AgentsPage() {
                         sendMessage();
                       }
                     }}
-                    placeholder={`Message ${activeAgent.name}...`}
+                    placeholder={activeAgent ? `Message ${activeAgent.name}...` : "Type a message..."}
                     disabled={sending}
                     className="flex-1 rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                     style={{

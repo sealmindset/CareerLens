@@ -10,3 +10,5 @@ anthropic
 azure-identity
 beautifulsoup4
 python-multipart
+PyPDF2
+python-docx

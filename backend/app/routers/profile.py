@@ -1,6 +1,7 @@
 import uuid
+from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,11 +12,12 @@ from app.models.profile import Profile, ProfileSkill, ProfileExperience, Profile
 from app.models.user import User
 from app.schemas.auth import UserInfo
 from app.schemas.profile import (
-    ProfileOut, ProfileUpdate,
+    ProfileOut, ProfileUpdate, ResumeUploadResult,
     SkillCreate, SkillOut,
     ExperienceCreate, ExperienceOut,
     EducationCreate, EducationOut,
 )
+from app.services.resume_parser import parse_resume
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
@@ -112,7 +114,7 @@ async def remove_skill(
     await db.commit()
 
 
-@router.post("/experience", response_model=ExperienceOut, status_code=status.HTTP_201_CREATED)
+@router.post("/experiences", response_model=ExperienceOut, status_code=status.HTTP_201_CREATED)
 async def add_experience(
     data: ExperienceCreate,
     current_user: UserInfo = Depends(require_permission("profile", "edit")),
@@ -129,7 +131,7 @@ async def add_experience(
     return experience
 
 
-@router.put("/experience/{exp_id}", response_model=ExperienceOut)
+@router.put("/experiences/{exp_id}", response_model=ExperienceOut)
 async def update_experience(
     exp_id: uuid.UUID,
     data: ExperienceCreate,
@@ -159,7 +161,7 @@ async def update_experience(
     return experience
 
 
-@router.delete("/experience/{exp_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/experiences/{exp_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_experience(
     exp_id: uuid.UUID,
     current_user: UserInfo = Depends(require_permission("profile", "edit")),
@@ -183,7 +185,7 @@ async def remove_experience(
     await db.commit()
 
 
-@router.post("/education", response_model=EducationOut, status_code=status.HTTP_201_CREATED)
+@router.post("/educations", response_model=EducationOut, status_code=status.HTTP_201_CREATED)
 async def add_education(
     data: EducationCreate,
     current_user: UserInfo = Depends(require_permission("profile", "edit")),
@@ -200,7 +202,7 @@ async def add_education(
     return education
 
 
-@router.delete("/education/{edu_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/educations/{edu_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_education(
     edu_id: uuid.UUID,
     current_user: UserInfo = Depends(require_permission("profile", "edit")),
@@ -224,24 +226,120 @@ async def remove_education(
     await db.commit()
 
 
-@router.post("/upload-resume", response_model=ProfileOut)
+@router.post("/upload-resume", response_model=ResumeUploadResult)
 async def upload_resume(
-    data: dict,
+    file: UploadFile = File(...),
     current_user: UserInfo = Depends(require_permission("profile", "edit")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Placeholder for resume parsing. Accepts {"text": "..."} and stores raw text."""
+    """Upload a resume PDF/Word/text file. AI parses it into profile fields and stores raw text."""
+    if not file.filename:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file provided")
+
+    # Validate file size (10 MB max)
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10 MB)")
+
     user_id = await _get_user_id(db, current_user)
     profile = await _get_or_create_profile(db, user_id)
 
-    raw_text = data.get("text", "")
-    if not raw_text:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Request body must include 'text' field with resume content",
-        )
+    # Parse the resume
+    result = await parse_resume(contents, file.filename)
 
-    profile.raw_resume_text = raw_text
+    if "error" in result and "raw_text" not in result:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=result["error"])
+
+    # Always store the raw text
+    raw_text = result.get("raw_text", "")
+    if raw_text:
+        profile.raw_resume_text = raw_text
+
+    # Track what was added
+    skills_added = 0
+    experiences_added = 0
+    educations_added = 0
+
+    # Extract and populate profile fields
+    if result.get("headline"):
+        profile.headline = result["headline"]
+    if result.get("summary"):
+        profile.summary = result["summary"]
+
+    # Add skills (skip duplicates)
+    existing_skill_names = {s.skill_name.lower() for s in profile.skills}
+    for skill_data in result.get("skills", []):
+        name = skill_data.get("skill_name", "").strip()
+        if not name or name.lower() in existing_skill_names:
+            continue
+        proficiency = skill_data.get("proficiency_level", "intermediate")
+        if proficiency not in ("beginner", "intermediate", "advanced", "expert"):
+            proficiency = "intermediate"
+        skill = ProfileSkill(
+            profile_id=profile.id,
+            skill_name=name,
+            proficiency_level=proficiency,
+            years_experience=skill_data.get("years_experience"),
+            source="resume",
+        )
+        db.add(skill)
+        existing_skill_names.add(name.lower())
+        skills_added += 1
+
+    # Add experiences
+    for exp_data in result.get("experiences", []):
+        company = exp_data.get("company", "").strip()
+        title = exp_data.get("title", "").strip()
+        if not company or not title:
+            continue
+        start_str = exp_data.get("start_date")
+        end_str = exp_data.get("end_date")
+        exp = ProfileExperience(
+            profile_id=profile.id,
+            company=company,
+            title=title,
+            description=exp_data.get("description"),
+            start_date=_parse_date(start_str),
+            end_date=_parse_date(end_str),
+            is_current=bool(exp_data.get("is_current", False)),
+        )
+        db.add(exp)
+        experiences_added += 1
+
+    # Add educations
+    for edu_data in result.get("educations", []):
+        institution = edu_data.get("institution", "").strip()
+        if not institution:
+            continue
+        edu = ProfileEducation(
+            profile_id=profile.id,
+            institution=institution,
+            degree=edu_data.get("degree"),
+            field_of_study=edu_data.get("field_of_study"),
+            graduation_date=_parse_date(edu_data.get("graduation_date")),
+        )
+        db.add(edu)
+        educations_added += 1
+
     await db.commit()
     await db.refresh(profile)
-    return profile
+
+    return ResumeUploadResult(
+        profile=ProfileOut.model_validate(profile),
+        skills_added=skills_added,
+        experiences_added=experiences_added,
+        educations_added=educations_added,
+        raw_text_length=len(raw_text),
+        error=result.get("error"),
+    )
+
+
+def _parse_date(date_str: str | None) -> date | None:
+    """Parse a date string in various formats to a date object."""
+    if not date_str:
+        return None
+    try:
+        # Try ISO format first (YYYY-MM-DD)
+        return date.fromisoformat(date_str[:10])
+    except (ValueError, TypeError):
+        return None

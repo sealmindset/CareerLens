@@ -96,3 +96,12 @@ class ProfileOut(BaseModel):
     skills: list[SkillOut] = []
     experiences: list[ExperienceOut] = []
     educations: list[EducationOut] = []
+
+
+class ResumeUploadResult(BaseModel):
+    profile: ProfileOut
+    skills_added: int = 0
+    experiences_added: int = 0
+    educations_added: int = 0
+    raw_text_length: int = 0
+    error: str | None = None

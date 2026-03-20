@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,9 @@ from app.ai.provider import get_ai_provider, get_model_for_tier
 from app.ai.sanitize import sanitize_prompt_input
 from app.ai.validate import validate_agent_output
 from app.models.agent_conversation import AgentMessage
+from app.models.application import Application
+from app.models.profile import Profile
+from app.models.workspace import AgentWorkspace, WorkspaceArtifact
 
 logger = logging.getLogger(__name__)
 
@@ -71,19 +75,68 @@ DEFAULT_PROMPTS = {
 }
 
 
+async def _build_application_context(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    application_id: uuid.UUID,
+) -> str:
+    """Build context string from the application's job listing, user profile, and workspace artifacts."""
+    from app.services.agents.base import format_job_context, format_profile_context
+    from app.services.workspace_service import build_workspace_context
+
+    parts = []
+
+    # Load profile
+    prof_result = await db.execute(
+        select(Profile).where(Profile.user_id == user_id)
+    )
+    profile = prof_result.scalar_one_or_none()
+    if profile:
+        parts.append(format_profile_context(profile))
+
+    # Load application with job listing
+    app_result = await db.execute(
+        select(Application).where(Application.id == application_id)
+    )
+    application = app_result.scalar_one_or_none()
+    if application and application.job_listing:
+        parts.append(format_job_context(application.job_listing))
+
+    # Load workspace artifacts
+    ws_result = await db.execute(
+        select(AgentWorkspace).where(AgentWorkspace.application_id == application_id)
+    )
+    workspace = ws_result.scalar_one_or_none()
+    if workspace:
+        art_result = await db.execute(
+            select(WorkspaceArtifact)
+            .where(WorkspaceArtifact.workspace_id == workspace.id)
+            .order_by(WorkspaceArtifact.created_at.asc())
+        )
+        artifacts = list(art_result.scalars().all())
+        ws_context = build_workspace_context(artifacts)
+        if ws_context:
+            parts.append(ws_context)
+
+    return "\n\n".join(parts)
+
+
 async def generate_agent_response(
     db: AsyncSession,
     agent_name: str,
     conversation_id: str,
     user_message: str,
+    application_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> str:
     """Generate an AI response for the given agent and conversation.
 
     1. Load system prompt from DB (or fallback)
-    2. Build conversation history
-    3. Sanitize user input
-    4. Call AI provider
-    5. Validate and return response
+    2. Build application context (if conversation is scoped to an application)
+    3. Build conversation history
+    4. Sanitize user input
+    5. Call AI provider
+    6. Validate and return response
     """
     slug = AGENT_SLUGS.get(agent_name, f"{agent_name}-system")
     fallback = DEFAULT_PROMPTS.get(agent_name, DEFAULT_PROMPTS["scout"])
@@ -91,6 +144,11 @@ async def generate_agent_response(
     # Load system prompt and config from managed prompts
     system_prompt = await get_prompt(db, slug, fallback)
     temperature, max_tokens, model_tier = await get_prompt_config(db, slug)
+
+    # Build application context if this conversation is scoped to a job application
+    app_context = ""
+    if application_id and user_id:
+        app_context = await _build_application_context(db, user_id, application_id)
 
     # Build conversation history for context
     result = await db.execute(
@@ -113,15 +171,21 @@ async def generate_agent_response(
     # Sanitize and add the new user message
     sanitized_input = sanitize_prompt_input(user_message)
 
+    # Assemble the full user prompt
+    prompt_parts = []
+
+    if app_context:
+        prompt_parts.append(app_context)
+
     if context_parts:
-        user_prompt = (
-            "Previous conversation:\n"
-            + "\n".join(context_parts)
-            + "\n\nNew message from user:\n"
-            + sanitized_input
+        prompt_parts.append(
+            "Previous conversation:\n" + "\n".join(context_parts)
         )
+        prompt_parts.append("New message from user:\n" + sanitized_input)
     else:
-        user_prompt = sanitized_input
+        prompt_parts.append(sanitized_input)
+
+    user_prompt = "\n\n".join(prompt_parts)
 
     # Call AI provider
     try:

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, apiUpload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDate } from "@/lib/utils";
 import type {
@@ -9,6 +9,7 @@ import type {
   ProfileSkill,
   ProfileExperience,
   ProfileEducation,
+  ResumeUploadResult,
 } from "@/lib/types";
 import {
   Plus,
@@ -17,6 +18,9 @@ import {
   Save,
   X,
   Upload,
+  FileText,
+  CheckCircle,
+  AlertCircle,
   Link as LinkIcon,
   Loader2,
 } from "lucide-react";
@@ -34,8 +38,11 @@ export default function ProfilePage() {
   const [headline, setHeadline] = useState("");
   const [summary, setSummary] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
-  const [resumeText, setResumeText] = useState("");
-  const [showResumeUpload, setShowResumeUpload] = useState(false);
+  const [showResumeUpload, setShowResumeUpload] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<ResumeUploadResult | null>(null);
+  const [uploadError, setUploadError] = useState("");
+  const [dragOver, setDragOver] = useState(false);
 
   // Skill form
   const [showSkillForm, setShowSkillForm] = useState(false);
@@ -70,7 +77,6 @@ export default function ProfilePage() {
       setHeadline(data.headline || "");
       setSummary(data.summary || "");
       setLinkedinUrl(data.linkedin_url || "");
-      setResumeText(data.raw_resume_text || "");
     } catch (err) {
       console.error("Failed to load profile:", err);
     } finally {
@@ -98,17 +104,50 @@ export default function ProfilePage() {
     }
   };
 
-  const uploadResume = async () => {
-    setSaving(true);
-    try {
-      await apiPost("/profile/resume", { raw_resume_text: resumeText });
-      setShowResumeUpload(false);
-      await fetchProfile();
-    } catch (err) {
-      console.error("Failed to upload resume:", err);
-    } finally {
-      setSaving(false);
+  const handleResumeUpload = async (file: File) => {
+    const validTypes = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "text/plain",
+    ];
+    const validExts = [".pdf", ".docx", ".txt"];
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+
+    if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
+      setUploadError("Please upload a PDF, Word (.docx), or text file.");
+      return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError("File too large (max 10 MB).");
+      return;
+    }
+
+    setUploading(true);
+    setUploadError("");
+    setUploadResult(null);
+    try {
+      const result = await apiUpload<ResumeUploadResult>("/profile/upload-resume", file);
+      setUploadResult(result);
+      await fetchProfile();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setUploadError(message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleResumeUpload(file);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleResumeUpload(file);
+    e.target.value = "";
   };
 
   const addSkill = async () => {
@@ -336,50 +375,113 @@ export default function ProfilePage() {
           color: "var(--card-foreground)",
         }}
       >
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium">Resume Text</label>
+        <div className="flex items-center justify-between mb-3">
+          <label className="text-sm font-medium">
+            <FileText className="inline h-4 w-4 mr-1" />
+            Resume
+          </label>
           {canEdit && (
             <button
-              onClick={() => setShowResumeUpload(!showResumeUpload)}
+              onClick={() => {
+                setShowResumeUpload(!showResumeUpload);
+                setUploadResult(null);
+                setUploadError("");
+              }}
               className="inline-flex items-center gap-1 text-sm font-medium transition-colors"
               style={{ color: "var(--primary)" }}
             >
               <Upload className="h-4 w-4" />
-              {showResumeUpload ? "Cancel" : "Upload Resume"}
+              {showResumeUpload ? "Cancel" : profile?.raw_resume_text ? "Re-upload Resume" : "Upload Resume"}
             </button>
           )}
         </div>
+
         {showResumeUpload ? (
           <div className="space-y-3">
-            <textarea
-              value={resumeText}
-              onChange={(e) => setResumeText(e.target.value)}
-              placeholder="Paste your resume text here..."
-              rows={8}
-              className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring resize-none"
+            {/* Drop zone */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleFileDrop}
+              className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
+                dragOver ? "border-primary bg-primary/5" : ""
+              }`}
               style={{
-                backgroundColor: "var(--background)",
-                borderColor: "var(--border)",
-              }}
-            />
-            <button
-              onClick={uploadResume}
-              disabled={saving || !resumeText.trim()}
-              className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
-              style={{
-                backgroundColor: "var(--primary)",
-                color: "var(--primary-foreground)",
+                borderColor: dragOver ? "var(--primary)" : "var(--border)",
               }}
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save Resume
-            </button>
+              {uploading ? (
+                <>
+                  <Loader2 className="h-8 w-8 animate-spin mb-2" style={{ color: "var(--primary)" }} />
+                  <p className="text-sm font-medium">Parsing your resume with AI...</p>
+                  <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                    This may take a few seconds
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-8 w-8 mb-2" style={{ color: "var(--muted-foreground)" }} />
+                  <p className="text-sm font-medium">
+                    Drag and drop your resume here
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                    PDF, Word (.docx), or text file (max 10 MB)
+                  </p>
+                  <label
+                    className="mt-3 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium cursor-pointer transition-colors"
+                    style={{
+                      backgroundColor: "var(--primary)",
+                      color: "var(--primary-foreground)",
+                    }}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Choose File
+                    <input
+                      type="file"
+                      accept=".pdf,.docx,.txt"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+
+            {/* Upload result */}
+            {uploadResult && !uploadResult.error && (
+              <div
+                className="flex items-start gap-3 rounded-md border p-3"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)" }}
+              >
+                <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: "hsl(142, 76%, 36%)" }} />
+                <div className="text-sm">
+                  <p className="font-medium">Resume parsed successfully!</p>
+                  <p style={{ color: "var(--muted-foreground)" }}>
+                    Added {uploadResult.skills_added} skill{uploadResult.skills_added !== 1 ? "s" : ""},
+                    {" "}{uploadResult.experiences_added} experience{uploadResult.experiences_added !== 1 ? "s" : ""},
+                    {" "}{uploadResult.educations_added} education{uploadResult.educations_added !== 1 ? "s" : ""}.
+                    {" "}Raw text saved ({uploadResult.raw_text_length.toLocaleString()} characters).
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Upload error */}
+            {(uploadError || uploadResult?.error) && (
+              <div
+                className="flex items-start gap-3 rounded-md border p-3"
+                style={{ borderColor: "var(--destructive)", backgroundColor: "hsl(0 84% 60% / 0.1)" }}
+              >
+                <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: "var(--destructive)" }} />
+                <p className="text-sm">{uploadError || uploadResult?.error}</p>
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
             {profile?.raw_resume_text
-              ? `Resume uploaded (${profile.raw_resume_text.length} characters)`
-              : "No resume uploaded yet."}
+              ? `Resume uploaded (${profile.raw_resume_text.length.toLocaleString()} characters). Skills, experience, and education were extracted and added to your profile.`
+              : "No resume uploaded yet. Upload a PDF or Word document to auto-fill your profile."}
           </p>
         )}
       </div>

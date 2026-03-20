@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.5.0] - 2026-03-19
+
+### Added
+- Shared Agent Workspace per job application with artifact storage and versioning
+- Agent Preflight System -- each agent checks required data and guides user to provide missing info
+- Agent Task Runner -- run individual agents against a workspace (user-directed mode)
+- Agent Pipeline -- automatic chaining (Full: Scout->Tailor->Coach->Strategist->Brand Advisor->Coordinator, Quick: Scout->Tailor->Strategist)
+- 6 specialized agent task modules with concrete deliverable generation:
+  - Scout: Job match analysis + skill gap report
+  - Tailor: Tailored resume + keyword optimization guide
+  - Coach: Interview prep guide + STAR response bank
+  - Strategist: Cover letter + application strategy
+  - Brand Advisor: Company brief + culture/brand alignment guide
+  - Coordinator: Application checklist + follow-up plan
+- Workspace context injection -- each agent receives prior agents' outputs for comprehensive analysis
+- "Agent Workspace" mode on the Agents page with application selector, preflight indicators, pipeline controls, and artifact viewer
+- Workspace RBAC permissions (view/create/edit/delete) granted to all roles
+- Database migration 005 for agent_workspaces, workspace_artifacts, pipeline_runs tables
+
+### Fixed
+- Profile page resume upload UI: removed crash-causing undefined setResumeText call
+- Profile page: drag-and-drop upload zone now visible by default (was hidden behind toggle)
+
+## [0.4.0] - 2026-03-19
+
+### Added
+- Resume PDF/Word upload with AI-powered parsing (PyPDF2 + python-docx + AI provider)
+- Drag-and-drop file upload on the Profile page (PDF, .docx, .txt)
+- AI extracts headline, summary, skills, experience, and education from resume text
+- Extracted data auto-populates profile fields (skills, experience, education)
+- Raw resume text stored for AI agents to reference
+- Upload result summary shows what was extracted (skills, experiences, educations added)
+- ResumeUploadResult schema for frontend/backend contract
+- apiUpload helper for file uploads in frontend API client
+
+### Fixed
+- Profile experience/education API routes now use plural paths (/experiences, /educations) matching frontend
+
 ## [0.3.0] - 2026-03-19
 
 ### Added

@@ -84,3 +84,18 @@ export async function apiDelete<T>(path: string): Promise<T> {
   });
   return handleResponse<T>(response);
 }
+
+export async function apiUpload<T>(
+  path: string,
+  file: File,
+  fieldName: string = "file",
+): Promise<T> {
+  const formData = new FormData();
+  formData.append(fieldName, file);
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  return handleResponse<T>(response);
+}

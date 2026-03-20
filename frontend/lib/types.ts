@@ -87,6 +87,15 @@ export interface ProfileEducation {
   created_at: string;
 }
 
+export interface ResumeUploadResult {
+  profile: Profile;
+  skills_added: number;
+  experiences_added: number;
+  educations_added: number;
+  raw_text_length: number;
+  error: string | null;
+}
+
 export interface JobScrapeResult {
   title: string | null;
   company: string | null;
@@ -205,4 +214,62 @@ export interface DashboardStats {
   profile_completeness: string;
   skills_count: number;
   recent_activity: number;
+}
+
+// Workspace types
+export interface WorkspaceArtifact {
+  id: string;
+  workspace_id: string;
+  agent_name: string;
+  artifact_type: string;
+  title: string;
+  content: string;
+  content_format: string;
+  version: number;
+  created_at: string;
+}
+
+export interface AgentWorkspace {
+  id: string;
+  application_id: string;
+  user_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  artifacts: WorkspaceArtifact[];
+}
+
+export interface PipelineRun {
+  id: string;
+  workspace_id: string;
+  pipeline_type: string;
+  status: string;
+  current_agent: string | null;
+  completed_agents: string;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PreflightItem {
+  name: string;
+  description: string;
+  status: string;
+  source: string;
+  detail: string | null;
+}
+
+export interface PreflightResult {
+  agent_name: string;
+  ready: boolean;
+  items: PreflightItem[];
+  suggestion: string | null;
+}
+
+export interface AgentTaskResult {
+  agent_name: string;
+  artifacts_created: WorkspaceArtifact[];
+  summary: string;
+  next_suggested_agent: string | null;
+  preflight_warnings: PreflightItem[];
 }
