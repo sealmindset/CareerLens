@@ -108,9 +108,14 @@ class ResumeUploadResult(BaseModel):
 
 
 # --- Experience AI Assist ---
+class ConversationMessage(BaseModel):
+    role: str  # "user" or "ai"
+    content: str
+
 class ExperienceAIRequest(BaseModel):
     action: str  # "enhance", "interview", "improve", or "chat"
     message: str | None = None
+    history: list[ConversationMessage] = []
 
 
 class ExperienceAIResponse(BaseModel):

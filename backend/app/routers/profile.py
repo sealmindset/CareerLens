@@ -235,12 +235,16 @@ async def experience_ai_assist(
         profile_parts.append(f"**Skills:** {', '.join(skill_names)}")
     profile_context = "## User Profile\n" + "\n".join(profile_parts) if profile_parts else ""
 
+    # Build conversation history for context
+    conv_history = [(msg.role, msg.content) for msg in data.history[-10:]]
+
     suggestion = await generate_experience_assist(
         db=db,
         action=data.action,
         experience_context=experience_context,
         profile_context=profile_context,
         custom_message=data.message,
+        conversation_history=conv_history,
     )
 
     return ExperienceAIResponse(suggestion=suggestion)

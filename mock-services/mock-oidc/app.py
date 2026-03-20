@@ -85,6 +85,23 @@ _clients: dict[str, dict] = {
     CLIENT_ID: {"redirect_uris": []},
 }
 
+# ---------------------------------------------------------------------------
+# Seed users from environment (survives container restarts)
+# ---------------------------------------------------------------------------
+# MOCK_OIDC_SEED_USERS: JSON array of {sub, email, name} objects
+# MOCK_OIDC_SEED_REDIRECT_URIS: comma-separated list of redirect URIs
+_seed_users_json = os.getenv("MOCK_OIDC_SEED_USERS", "")
+if _seed_users_json:
+    try:
+        for u in json.loads(_seed_users_json):
+            _users[u["sub"]] = {"sub": u["sub"], "email": u["email"], "name": u["name"]}
+    except (json.JSONDecodeError, KeyError):
+        pass  # Ignore malformed seed data
+
+_seed_redirects = os.getenv("MOCK_OIDC_SEED_REDIRECT_URIS", "")
+if _seed_redirects:
+    _clients[CLIENT_ID]["redirect_uris"] = [u.strip() for u in _seed_redirects.split(",") if u.strip()]
+
 # Auth code expiry in seconds
 AUTH_CODE_TTL = 300  # 5 minutes
 

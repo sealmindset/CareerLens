@@ -119,11 +119,30 @@ services:
       - MOCK_OIDC_INTERNAL_BASE_URL=http://mock-oidc:10090
       - MOCK_OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-mock-oidc-client}
       - MOCK_OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-mock-oidc-secret}
+      - MOCK_OIDC_SEED_USERS=[{"sub":"mock-admin","email":"admin@career-lens.local","name":"Admin User"},{"sub":"mock-manager","email":"manager@career-lens.local","name":"Manager User"},{"sub":"mock-pro","email":"pro@career-lens.local","name":"Pro User"},{"sub":"mock-user","email":"user@career-lens.local","name":"Regular User"}]
+      - MOCK_OIDC_SEED_REDIRECT_URIS=http://localhost:3300/api/auth/callback
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10090/health')"]
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - app-network
+
+  # --------------------------------------------------------------------------
+  # Mock OIDC Seeder (one-shot, auto-seeds users on startup)
+  # --------------------------------------------------------------------------
+  mock-oidc-seed:
+    image: python:3.12-alpine
+    profiles:
+      - dev
+    depends_on:
+      mock-oidc:
+        condition: service_healthy
+    volumes:
+      - ./scripts/seed-mock-oidc-internal.sh:/seed.sh:ro
+    entrypoint: ["sh", "/seed.sh"]
+    restart: "no"
     networks:
       - app-network
 
