@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.0] - 2026-03-19
+
+### Added
+- Experience AI Assistant on My Profile page -- inline AI panel on each experience card
+- Three one-click AI actions per experience: Enhance (rewrite with impact), Suggest Improvements (actionable advice), Interview Questions (STAR-method prompts to surface accomplishments)
+- Custom chat input for free-form questions about any experience entry
+- POST /api/profile/experiences/{exp_id}/ai-assist endpoint with action-based routing
+- Experience Enhancer agent with managed system prompt (DB-stored, editable via admin)
+- AI responses rendered with rich markdown (tables, lists, code blocks)
+
 ## [0.6.0] - 2026-03-19
 
 ### Added

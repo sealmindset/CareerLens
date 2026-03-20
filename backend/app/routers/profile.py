@@ -16,6 +16,7 @@ from app.schemas.profile import (
     SkillCreate, SkillOut,
     ExperienceCreate, ExperienceOut,
     EducationCreate, EducationOut,
+    ExperienceAIRequest, ExperienceAIResponse,
 )
 from app.services.resume_parser import parse_resume
 
@@ -183,6 +184,66 @@ async def remove_experience(
 
     await db.delete(experience)
     await db.commit()
+
+
+@router.post("/experiences/{exp_id}/ai-assist", response_model=ExperienceAIResponse)
+async def experience_ai_assist(
+    exp_id: uuid.UUID,
+    data: ExperienceAIRequest,
+    current_user: UserInfo = Depends(require_permission("profile", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    """AI-powered assistance for an experience entry (enhance, interview, improve, or chat)."""
+    from app.ai.agent_service import generate_experience_assist
+
+    user_id = await _get_user_id(db, current_user)
+    profile = await _get_or_create_profile(db, user_id)
+
+    # Load the specific experience
+    result = await db.execute(
+        select(ProfileExperience).where(
+            ProfileExperience.id == exp_id,
+            ProfileExperience.profile_id == profile.id,
+        )
+    )
+    experience = result.scalar_one_or_none()
+    if not experience:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Experience not found")
+
+    if data.action not in ("enhance", "interview", "improve", "chat"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid action")
+
+    # Build experience context
+    exp_parts = [
+        f"**Role:** {experience.title} at {experience.company}",
+        f"**Period:** {experience.start_date or 'N/A'} - {'Present' if experience.is_current else experience.end_date or 'N/A'}",
+    ]
+    if experience.description:
+        exp_parts.append(f"**Current Description:**\n{experience.description}")
+    else:
+        exp_parts.append("**Current Description:** (empty -- no description yet)")
+    experience_context = "## Experience Entry\n" + "\n".join(exp_parts)
+
+    # Build profile context (skills + other experiences for broader context)
+    profile_parts = []
+    if profile.headline:
+        profile_parts.append(f"**Headline:** {profile.headline}")
+    if profile.summary:
+        profile_parts.append(f"**Summary:** {profile.summary}")
+    if profile.skills:
+        skill_names = [s.skill_name for s in profile.skills[:20]]
+        profile_parts.append(f"**Skills:** {', '.join(skill_names)}")
+    profile_context = "## User Profile\n" + "\n".join(profile_parts) if profile_parts else ""
+
+    suggestion = await generate_experience_assist(
+        db=db,
+        action=data.action,
+        experience_context=experience_context,
+        profile_context=profile_context,
+        custom_message=data.message,
+    )
+
+    return ExperienceAIResponse(suggestion=suggestion)
 
 
 @router.post("/educations", response_model=EducationOut, status_code=status.HTTP_201_CREATED)

@@ -10,7 +10,9 @@ import type {
   ProfileExperience,
   ProfileEducation,
   ResumeUploadResult,
+  ExperienceAIResponse,
 } from "@/lib/types";
+import { MarkdownContent } from "@/components/markdown-content";
 import {
   Plus,
   Trash2,
@@ -23,6 +25,11 @@ import {
   AlertCircle,
   Link as LinkIcon,
   Loader2,
+  Sparkles,
+  MessageSquare,
+  Lightbulb,
+  HelpCircle,
+  Send,
 } from "lucide-react";
 
 const proficiencyLevels = ["beginner", "intermediate", "advanced", "expert"];
@@ -67,6 +74,12 @@ export default function ProfilePage() {
   const [eduDegree, setEduDegree] = useState("");
   const [eduField, setEduField] = useState("");
   const [eduGradDate, setEduGradDate] = useState("");
+
+  // AI Assist state
+  const [aiExpId, setAiExpId] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [aiMessage, setAiMessage] = useState("");
 
   const canEdit = hasPermission("profile", "edit");
 
@@ -226,6 +239,35 @@ export default function ProfilePage() {
       await fetchProfile();
     } catch (err) {
       console.error("Failed to delete experience:", err);
+    }
+  };
+
+  const handleAiAssist = async (expId: string, action: string, message?: string) => {
+    setAiLoading(true);
+    setAiResponse(null);
+    try {
+      const resp = await apiPost<ExperienceAIResponse>(
+        `/profile/experiences/${expId}/ai-assist`,
+        { action, message: message || null }
+      );
+      setAiResponse(resp.suggestion);
+    } catch (err) {
+      console.error("AI assist failed:", err);
+      setAiResponse("Sorry, I couldn't generate a suggestion right now. Please try again.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const toggleAiPanel = (expId: string) => {
+    if (aiExpId === expId) {
+      setAiExpId(null);
+      setAiResponse(null);
+      setAiMessage("");
+    } else {
+      setAiExpId(expId);
+      setAiResponse(null);
+      setAiMessage("");
     }
   };
 
@@ -780,6 +822,13 @@ export default function ProfilePage() {
                   {canEdit && (
                     <div className="flex gap-1">
                       <button
+                        onClick={() => toggleAiPanel(exp.id)}
+                        className={`rounded p-1 transition-colors ${aiExpId === exp.id ? "bg-primary/10" : "hover:bg-accent"}`}
+                        title="AI Assist"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" style={{ color: aiExpId === exp.id ? "var(--primary)" : "var(--muted-foreground)" }} />
+                      </button>
+                      <button
                         onClick={() => openEditExp(exp)}
                         className="rounded p-1 transition-colors hover:bg-accent"
                       >
@@ -798,6 +847,104 @@ export default function ProfilePage() {
                   <p className="mt-2 text-sm" style={{ color: "var(--muted-foreground)" }}>
                     {exp.description}
                   </p>
+                )}
+
+                {/* AI Assist Panel */}
+                {aiExpId === exp.id && (
+                  <div
+                    className="mt-3 rounded-md border p-3 space-y-3"
+                    style={{ borderColor: "var(--primary)", backgroundColor: "var(--accent)" }}
+                  >
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Sparkles className="h-4 w-4" style={{ color: "var(--primary)" }} />
+                      AI Experience Assistant
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleAiAssist(exp.id, "enhance")}
+                        disabled={aiLoading}
+                        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-background disabled:opacity-50"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        Enhance
+                      </button>
+                      <button
+                        onClick={() => handleAiAssist(exp.id, "improve")}
+                        disabled={aiLoading}
+                        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-background disabled:opacity-50"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <Lightbulb className="h-3 w-3" />
+                        Suggest Improvements
+                      </button>
+                      <button
+                        onClick={() => handleAiAssist(exp.id, "interview")}
+                        disabled={aiLoading}
+                        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-background disabled:opacity-50"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <HelpCircle className="h-3 w-3" />
+                        Interview Questions
+                      </button>
+                    </div>
+
+                    {/* Custom message input */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={aiMessage}
+                        onChange={(e) => setAiMessage(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && aiMessage.trim()) {
+                            handleAiAssist(exp.id, "chat", aiMessage);
+                            setAiMessage("");
+                          }
+                        }}
+                        placeholder="Ask anything about this experience..."
+                        disabled={aiLoading}
+                        className="flex-1 rounded-md border px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                        style={{
+                          backgroundColor: "var(--background)",
+                          borderColor: "var(--border)",
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          if (aiMessage.trim()) {
+                            handleAiAssist(exp.id, "chat", aiMessage);
+                            setAiMessage("");
+                          }
+                        }}
+                        disabled={aiLoading || !aiMessage.trim()}
+                        className="rounded-md px-2 py-1.5 transition-colors disabled:opacity-50"
+                        style={{
+                          backgroundColor: "var(--primary)",
+                          color: "var(--primary-foreground)",
+                        }}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {/* AI Response */}
+                    {aiLoading && (
+                      <div className="flex items-center gap-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Thinking...
+                      </div>
+                    )}
+                    {aiResponse && (
+                      <div
+                        className="rounded-md border p-3 text-sm"
+                        style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                      >
+                        <MarkdownContent content={aiResponse} />
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

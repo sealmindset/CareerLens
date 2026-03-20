@@ -105,3 +105,13 @@ class ResumeUploadResult(BaseModel):
     educations_added: int = 0
     raw_text_length: int = 0
     error: str | None = None
+
+
+# --- Experience AI Assist ---
+class ExperienceAIRequest(BaseModel):
+    action: str  # "enhance", "interview", "improve", or "chat"
+    message: str | None = None
+
+
+class ExperienceAIResponse(BaseModel):
+    suggestion: str

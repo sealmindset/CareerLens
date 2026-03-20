@@ -96,6 +96,10 @@ export interface ResumeUploadResult {
   error: string | null;
 }
 
+export interface ExperienceAIResponse {
+  suggestion: string;
+}
+
 export interface JobScrapeResult {
   title: string | null;
   company: string | null;

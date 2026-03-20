@@ -24,6 +24,7 @@ AGENT_SLUGS = {
     "strategist": "strategist-system",
     "brand_advisor": "brand-advisor-system",
     "coordinator": "coordinator-system",
+    "experience_enhancer": "experience-enhancer-system",
 }
 
 # Default system prompts (fallback when DB has no published prompt)
@@ -72,6 +73,22 @@ DEFAULT_PROMPTS = {
         "Provide reminders, suggest next actions, and help prioritize applications "
         "based on match scores and deadlines. Be organized and systematic."
     ),
+    "experience_enhancer": (
+        "You are an Experience Enhancer AI assistant for CareerLens. "
+        "Your role is to help users write compelling, achievement-oriented descriptions "
+        "for their work experience entries.\n\n"
+        "You can:\n"
+        "- Enhance descriptions with stronger action verbs, quantified results, and impact statements\n"
+        "- Ask interview-style questions (using the STAR method) to help users recall accomplishments\n"
+        "- Suggest improvements to existing descriptions for clarity and impact\n"
+        "- Help users articulate their contributions and achievements\n\n"
+        "RULES:\n"
+        "- NEVER fabricate achievements, metrics, or experiences\n"
+        "- Ask clarifying questions to surface real accomplishments\n"
+        "- Use industry-appropriate language\n"
+        "- Keep descriptions concise (3-5 bullet points recommended)\n"
+        "- Use markdown formatting for readability"
+    ),
 }
 
 
@@ -119,6 +136,66 @@ async def _build_application_context(
             parts.append(ws_context)
 
     return "\n\n".join(parts)
+
+
+async def generate_experience_assist(
+    db: AsyncSession,
+    action: str,
+    experience_context: str,
+    profile_context: str,
+    custom_message: str | None = None,
+) -> str:
+    """Generate a one-shot AI response to assist with an experience entry."""
+    slug = AGENT_SLUGS["experience_enhancer"]
+    fallback = DEFAULT_PROMPTS["experience_enhancer"]
+
+    system_prompt = await get_prompt(db, slug, fallback)
+    temperature, max_tokens, model_tier = await get_prompt_config(db, slug)
+
+    action_instructions = {
+        "enhance": (
+            "The user wants you to enhance this experience description. "
+            "Rewrite it with stronger action verbs, quantified results where possible, "
+            "and clear impact statements. Present the enhanced version in markdown."
+        ),
+        "interview": (
+            "Ask the user 3-5 targeted interview-style questions about this role "
+            "to help them recall specific accomplishments, metrics, and impact. "
+            "Use the STAR method (Situation, Task, Action, Result). "
+            "Focus on areas where the description could be strengthened."
+        ),
+        "improve": (
+            "Review this experience description and provide specific, actionable suggestions "
+            "for improvement. Identify what's missing (metrics, impact, specifics) and "
+            "suggest how to make it more compelling. Don't rewrite it -- advise."
+        ),
+    }
+
+    instruction = action_instructions.get(action, "")
+
+    prompt_parts = [profile_context, experience_context]
+    if instruction:
+        prompt_parts.append(instruction)
+    if custom_message:
+        prompt_parts.append(f"User message: {sanitize_prompt_input(custom_message)}")
+
+    user_prompt = "\n\n".join(prompt_parts)
+
+    try:
+        provider = get_ai_provider()
+        model = get_model_for_tier(model_tier)
+        raw_response = await provider.complete(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return validate_agent_output(raw_response)
+    except Exception as e:
+        safe_error = sanitize_ai_error(e)
+        logger.error("AI provider error for experience_enhancer: %s", str(e))
+        return safe_error.message
 
 
 async def generate_agent_response(
