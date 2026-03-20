@@ -1,117 +1,188 @@
-# FastAPI + Next.js Scaffold
+# CareerLens
 
-## What This Is
+AI-powered job application assistant that helps job seekers analyze listings, tailor resumes, prepare for interviews, and track applications -- all guided by specialized AI agents.
 
-This is the infrastructure scaffold used by `/make-it` when building a web application with a FastAPI backend and Next.js frontend. It contains proven, battle-tested patterns extracted from real builds.
+## What It Does
 
-The scaffold provides the foundational infrastructure that every app needs -- authentication, database, Docker orchestration, and mock services for local development. Claude copies these files into the new project during the Build phase and replaces placeholders with app-specific values.
+- **Profile Builder** -- Manage your skills, experience, and education in one place
+- **Job Scraping** -- Paste a job URL and AI extracts the title, company, requirements, and description automatically
+- **6 AI Agents** -- Each specializes in a different part of your job search:
+  - **Scout** -- Analyzes job listings and identifies best matches
+  - **Tailor** -- Rewrites your resume in the employer's language while staying authentic
+  - **Coach** -- Interviews you to uncover hidden experience and fill gaps
+  - **Strategist** -- Positions your personal brand for each role
+  - **Brand Advisor** -- Researches company culture and values
+  - **Coordinator** -- Helps manage your application pipeline
+- **Application Tracker** -- Track status, notes, and follow-ups for every application
+- **Role-Based Access** -- 4 roles (Super Admin, Admin, Pro User, User) with granular permissions
+- **Prompt Management** -- Admin UI for editing AI agent prompts with versioning and audit logging
 
-## How Claude Uses This During /make-it
+## Tech Stack
 
-1. **Design phase** determines the app slug, ports, users, and integrations
-2. **Build phase** copies scaffold files into the project directory
-3. Placeholders are replaced with values from `app-context.json`
-4. App-specific code (frontend, backend, migrations) is generated on top of this foundation
-5. `seed-mock-services.sh` is customized with the app's users and any extra mock services
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 15, TypeScript, Tailwind CSS, shadcn/ui |
+| Backend | FastAPI, Python 3.12, SQLAlchemy, Alembic |
+| Database | PostgreSQL 16 |
+| Auth | OIDC (mock-oidc for local dev) |
+| AI | Multi-provider abstraction (Azure AI Foundry, Anthropic, OpenAI, Ollama) |
+| Infrastructure | Docker Compose |
 
-## Files
+## Quick Start
 
-| File | Copied As-Is? | Notes |
-|------|---------------|-------|
-| `mock-services/mock-oidc/` | Yes | Complete mock OIDC provider. Ships unchanged with every app. |
-| `docker-compose.yml` | Customized | Placeholders replaced; additional services added per app |
-| `scripts/seed-mock-services.sh` | Customized | User list and extra mock seeding filled in per app |
-| `.env.example` | Customized | Additional service URLs added per app |
-| `.gitignore` | Yes | Standard Python + Node.js + Docker gitignore |
+### Prerequisites
 
-## Placeholders
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Rancher Desktop)
+- Git
 
-All placeholders use the `[PLACEHOLDER_NAME]` format and are replaced during the Build phase.
-
-| Placeholder | Description | Example |
-|-------------|-------------|---------|
-| `CareerLens` | Human-readable app name | DeliverIt |
-| `career-lens` | Kebab-case identifier (used for DB, containers) | deliver-it |
-| `3300` | Host port mapped to frontend container port 3000 | 3100 |
-| `8300` | Host port mapped to backend container port 8000 | 8100 |
-| `5600` | Host port mapped to PostgreSQL container port 5432 | 5500 |
-| `10190` | Host port mapped to mock-oidc container port 10090 | 10090 |
-| `[SEED_USERS]` | JSON array of `{sub, email, name}` for seed script | See below |
-| `[ADDITIONAL_SERVICE_ENVS]` | Extra env vars in backend service | `JIRA_BASE_URL=...` |
-| `[ADDITIONAL_MOCK_SERVICES]` | Extra service definitions in docker-compose | mock-jira service block |
-| `[ADDITIONAL_MOCK_SEED]` | Extra seeding logic in seed script | Jira project creation |
-| `[ADDITIONAL_SERVICE_URLS]` | Extra env var docs in .env.example | `JIRA_BASE_URL=...` |
-
-### SEED_USERS Example
+### 1. Clone and configure
 
 ```bash
-SEED_USERS='[
-  {"sub": "mock-admin", "email": "admin@deliver-it.local", "name": "Admin User"},
-  {"sub": "mock-manager", "email": "manager@deliver-it.local", "name": "Manager User"},
-  {"sub": "mock-user", "email": "user@deliver-it.local", "name": "Regular User"},
-  {"sub": "mock-viewer", "email": "viewer@deliver-it.local", "name": "Viewer User"}
-]'
+git clone https://github.com/sealmindset/CareerLens.git
+cd CareerLens
+cp .env.example .env
 ```
 
-The `sub` values must exactly match the `oidc_subject` column in the database seed migration. This alignment is what connects "the person who logs in" to "the user row with the correct role."
+Edit `.env` and fill in:
+
+```bash
+# Generate a JWT secret
+JWT_SECRET=$(openssl rand -hex 32)
+
+# Configure your AI provider (pick one):
+
+# Option A: Azure AI Foundry with API key
+AI_PROVIDER=anthropic_foundry
+AZURE_AI_FOUNDRY_ENDPOINT=https://your-endpoint.services.ai.azure.com/anthropic
+AZURE_AI_FOUNDRY_API_KEY=your-api-key
+
+# Option B: Azure AI Foundry with Azure CLI auth (no API key)
+AI_PROVIDER=anthropic_foundry
+AZURE_AI_FOUNDRY_ENDPOINT=https://your-endpoint.services.ai.azure.com/anthropic
+# Leave AZURE_AI_FOUNDRY_API_KEY empty -- uses `az login` credentials
+
+# Option C: Direct Anthropic
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Option D: OpenAI
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+
+# Option E: Ollama (local, free)
+AI_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+```
+
+### 2. Build and start
+
+```bash
+docker compose --profile dev up -d --build
+```
+
+### 3. Seed test users
+
+```bash
+bash scripts/seed-mock-services.sh
+```
+
+### 4. Open the app
+
+Go to **http://localhost:3300** and sign in with one of the test users:
+
+| User | Email | Role |
+|------|-------|------|
+| Admin User | admin@career-lens.local | Super Admin |
+| Manager User | manager@career-lens.local | Admin |
+| Pro User | pro@career-lens.local | Pro User |
+| Regular User | user@career-lens.local | User |
 
 ## Architecture
 
-### Authentication Flow
-
 ```
-Browser                Frontend (Next.js)         Backend (FastAPI)        mock-oidc
-  |                         |                          |                      |
-  |-- click "Sign In" ----->|                          |                      |
-  |                         |-- redirect to /authorize ---------------------->|
-  |<-- login page (user list) ------------------------------------------------|
-  |-- select user ---------------------------------------------------------->|
-  |<-- redirect with ?code= ----------------------------                      |
-  |-- /api/auth/callback -->|                          |                      |
-  |                         |-- POST /token (code) ----|--------------------->|
-  |                         |<-- access_token + id_token ----------------------|
-  |                         |-- GET /userinfo ----------|--------------------->|
-  |                         |<-- {sub, email, name} ---|----------------------|
-  |                         |-- POST /auth/callback --->|                      |
-  |                         |                          |-- lookup user by sub  |
-  |                         |                          |-- get role + perms    |
-  |                         |                          |-- create session JWT  |
-  |                         |<-- set cookie + redirect-|                      |
-  |<-- authenticated -------|                          |                      |
+Browser --> Next.js (3300) --proxy--> FastAPI (8300) --> PostgreSQL (5600)
+                                         |
+                                         +--> AI Provider (Azure/Anthropic/OpenAI/Ollama)
+                                         |
+                                         +--> mock-oidc (10190) [local dev only]
 ```
 
-Key points:
-- The frontend proxies auth requests to the backend (Next.js API routes)
-- The backend exchanges the code for tokens server-to-server (never exposed to browser)
-- User roles come from the application database, NOT from the OIDC provider
-- The mock-oidc provider only supplies identity (sub, email, name)
+- **Same-origin proxy** -- Next.js proxies `/api/*` to the FastAPI backend, avoiding CORS and cookie issues
+- **OIDC auth** -- Browser redirects to mock-oidc for login, backend exchanges code for tokens server-to-server
+- **Database-driven RBAC** -- Roles and permissions stored in PostgreSQL, never hardcoded
+- **AI provider abstraction** -- Business logic calls a generic interface; the provider is selected at runtime via `AI_PROVIDER` env var
 
-### Internal/External URL Split
+## Project Structure
 
-mock-oidc natively handles the Docker networking split:
-- `MOCK_OIDC_EXTERNAL_BASE_URL` (e.g., `http://localhost:10090`) -- used for the `authorization_endpoint` in the discovery document, since the browser navigates to it directly
-- `MOCK_OIDC_INTERNAL_BASE_URL` (e.g., `http://mock-oidc:10090`) -- used for `token_endpoint`, `userinfo_endpoint`, and `jwks_uri`, since the backend calls these server-to-server inside the Docker network
+```
+career-lens/
+  backend/
+    app/
+      ai/                  # AI provider abstraction + agent service
+        providers/         # Anthropic Foundry, Anthropic, OpenAI, Ollama
+      models/              # SQLAlchemy models
+      routers/             # FastAPI route handlers
+      schemas/             # Pydantic request/response schemas
+      services/            # Business logic (job scraper, etc.)
+    alembic/               # Database migrations
+    entrypoint.sh          # DB migration + server startup
+  frontend/
+    app/(auth)/            # Authenticated pages (dashboard, jobs, profile, etc.)
+    components/            # Shared UI (sidebar, data-table, breadcrumbs, etc.)
+    lib/                   # API client, auth hooks, types
+  mock-services/
+    mock-oidc/             # Local OIDC provider for development
+  scripts/
+    seed-mock-services.sh  # Seeds test users into mock-oidc
+  docker-compose.yml
+  .env.example
+```
 
-This eliminates the need for `OIDC_INTERNAL_URL` environment variables or URL rewriting logic in the application.
+## Key Features
 
-### RBAC
+### Job URL Scraping
 
-The database has four tables for role-based access control:
-- `roles` -- system roles (Super Admin, Admin, Manager, User) plus custom roles
-- `permissions` -- page-level CRUD permissions (e.g., `forecasts.view`, `users.create`)
-- `role_permissions` -- junction table mapping roles to permissions
-- `users` -- has a `role_id` foreign key and `oidc_subject` for OIDC identity mapping
+Paste any job listing URL and the AI extracts structured data:
 
-Every route handler uses `require_permission(resource, action)` middleware. The app never checks role strings directly.
+- **Auto-scrape** -- Paste a URL in the Add Job modal and fields auto-fill
+- **Import from URL** -- One-click button to scrape and create a job listing
+- Works behind corporate SSL proxies (Zscaler, Netskope, etc.)
 
-### Health Checks
+### AI Agents
 
-All health checks use `127.0.0.1` (not `localhost`) to avoid IPv6 resolution issues in Alpine containers:
-- **Frontend**: `wget --spider -q http://127.0.0.1:3000` (Alpine has wget)
-- **Backend**: `python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"` (slim image, no wget/curl)
-- **mock-oidc**: `python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10090/health')"` (slim image)
-- **PostgreSQL**: `pg_isready -U career-lens`
+Each agent has a managed system prompt stored in the database. Admins can edit prompts through the admin UI with:
 
-### Port Selection
+- Version history for every edit
+- Save/test/publish workflow
+- Audit logging (who changed what, when)
+- Safety preamble prepended at runtime (cannot be edited or bypassed)
+- Adversarial prompt validation (blocks injection attempts)
 
-Default ports (3000, 5432, 8000) are almost always taken on developer machines running multiple Docker projects. During the Design phase, `/make-it` checks `lsof -i :PORT` and selects available ports. The scaffold placeholders make this remapping seamless.
+### Permissions
+
+27 granular permissions across all resources. Each API endpoint checks permissions at runtime via `require_permission(resource, action)`. The frontend hides UI elements the user doesn't have access to.
+
+## Stopping the App
+
+```bash
+docker compose --profile dev down
+```
+
+## Environment Variables
+
+See [`.env.example`](.env.example) for all configuration options.
+
+## Roadmap
+
+See [`TODO.md`](TODO.md) for planned features including:
+
+- Resume PDF/Word upload and parsing
+- LinkedIn profile import
+- RAG/CAG system for resume content
+- Playwright-based application form auto-fill
+- Cover letter generation
+- Company research integration
+
+## License
+
+[CC0 1.0 Universal](LICENSE)
