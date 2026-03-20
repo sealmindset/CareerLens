@@ -10,7 +10,14 @@ from app.middleware.permissions import require_permission
 from app.models.job import JobListing
 from app.models.user import User
 from app.schemas.auth import UserInfo
-from app.schemas.job import JobListingCreate, JobListingOut, JobListingUpdate
+from app.schemas.job import (
+    JobListingCreate,
+    JobListingOut,
+    JobListingUpdate,
+    JobScrapeRequest,
+    JobScrapeResult,
+)
+from app.services.job_scraper import scrape_job_url
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -64,6 +71,77 @@ async def create_job(
 
     job = JobListing(user_id=user_id, **data.model_dump())
     db.add(job)
+    await db.commit()
+    await db.refresh(job)
+    return job
+
+
+@router.post("/scrape", response_model=JobScrapeResult)
+async def scrape_job(
+    data: JobScrapeRequest,
+    current_user: UserInfo = Depends(require_permission("jobs", "create")),
+):
+    """Scrape a job listing URL and return extracted details (does not save)."""
+    result = await scrape_job_url(data.url)
+    return JobScrapeResult(**result)
+
+
+@router.post("/import", response_model=JobListingOut, status_code=status.HTTP_201_CREATED)
+async def import_job(
+    data: JobScrapeRequest,
+    current_user: UserInfo = Depends(require_permission("jobs", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Scrape a job listing URL and create the job in one step."""
+    user_id = await _get_user_id(db, current_user)
+
+    # Check for duplicate URL
+    existing = await db.execute(
+        select(JobListing).where(
+            JobListing.user_id == user_id,
+            JobListing.url == data.url,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Job listing with this URL already exists",
+        )
+
+    result = await scrape_job_url(data.url)
+    if result.get("error"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=result["error"],
+        )
+
+    # Extract requirements before creating the job
+    requirements_data = result.pop("requirements", []) or []
+
+    job = JobListing(
+        user_id=user_id,
+        url=data.url,
+        title=result.get("title") or "Untitled Position",
+        company=result.get("company") or "Unknown Company",
+        description=result.get("description"),
+        location=result.get("location"),
+        salary_range=result.get("salary_range"),
+        job_type=result.get("job_type"),
+        source=result.get("source", "company_site"),
+    )
+    db.add(job)
+    await db.flush()
+
+    # Add extracted requirements
+    for req in requirements_data:
+        from app.models.job import JobRequirement
+
+        db.add(JobRequirement(
+            job_listing_id=job.id,
+            requirement_text=req.get("text", ""),
+            requirement_type=req.get("type", "required"),
+        ))
+
     await db.commit()
     await db.refresh(job)
     return job

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0] - 2026-03-19
+
+### Added
+- Job URL scraping with AI-powered extraction (httpx + BeautifulSoup + AI provider)
+- Auto-scrape: pasting a URL in the Add Job modal automatically extracts title, company, location, description, and requirements
+- "Import from URL" button: one-click scrape and create job listing with extracted requirements
+- POST /api/jobs/scrape endpoint (preview extracted data without saving)
+- POST /api/jobs/import endpoint (scrape + create in one step)
+- Auto-detection of job source from URL domain (LinkedIn, Indeed, Glassdoor, company site)
+- JobScrapeResult type for frontend/backend contract
+- SSL proxy tolerance for job scraping (works behind Zscaler/corporate proxies)
+
+### Changed
+- Azure AI Foundry provider now supports dual-mode auth: API key (preferred) or DefaultAzureCredential fallback
+- Fixed Azure AI Foundry endpoint URL for API key authentication
+
 ## [0.2.0] - 2026-03-19
 
 ### Added

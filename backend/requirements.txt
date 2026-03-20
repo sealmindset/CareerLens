@@ -6,5 +6,7 @@ alembic
 pydantic-settings
 PyJWT
 httpx
+anthropic
 azure-identity
+beautifulsoup4
 python-multipart

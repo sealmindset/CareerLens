@@ -15,6 +15,22 @@ class JobRequirementOut(BaseModel):
     gap_notes: str | None = None
 
 
+class JobScrapeRequest(BaseModel):
+    url: str
+
+
+class JobScrapeResult(BaseModel):
+    title: str | None = None
+    company: str | None = None
+    location: str | None = None
+    salary_range: str | None = None
+    job_type: str | None = None
+    description: str | None = None
+    source: str | None = None
+    requirements: list[dict] | None = None
+    error: str | None = None
+
+
 class JobListingCreate(BaseModel):
     url: str
     title: str = ""

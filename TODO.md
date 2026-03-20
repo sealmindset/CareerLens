@@ -2,7 +2,7 @@
 
 ## High Priority
 - [ ] Set AZURE_AI_FOUNDRY_ENDPOINT in .env (uses DefaultAzureCredential -- no API key needed)
-- [ ] Implement Playwright web scraping for job listing URLs
+- [x] Implement web scraping for job listing URLs (httpx + BeautifulSoup + AI extraction)
 - [ ] Implement resume PDF/Word upload and parsing
 - [ ] Implement LinkedIn profile import
 - [ ] Build RAG/CAG system for resume content storage and retrieval

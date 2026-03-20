@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { DataTable } from "@/components/data-table";
 import { DataTableColumnHeader } from "@/components/data-table-column-header";
 import { formatDate } from "@/lib/utils";
-import type { JobListing } from "@/lib/types";
+import type { JobListing, JobScrapeResult } from "@/lib/types";
 import {
   Plus,
   X,
@@ -18,6 +18,10 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
+  Download,
+  Globe,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 
 const statusColors: Record<string, { bg: string; text: string }> = {
@@ -48,8 +52,21 @@ export default function JobsPage() {
   const [addUrl, setAddUrl] = useState("");
   const [addTitle, setAddTitle] = useState("");
   const [addCompany, setAddCompany] = useState("");
+  const [addDescription, setAddDescription] = useState("");
+  const [addLocation, setAddLocation] = useState("");
   const [addSource, setAddSource] = useState("");
   const [addSaving, setAddSaving] = useState(false);
+
+  // Scrape state
+  const [scraping, setScraping] = useState(false);
+  const [scraped, setScraped] = useState(false);
+  const [scrapeError, setScrapeError] = useState("");
+
+  // Import from URL
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
 
   const canCreate = hasPermission("jobs", "create");
 
@@ -68,6 +85,51 @@ export default function JobsPage() {
     fetchJobs();
   }, [fetchJobs]);
 
+  const scrapeUrl = useCallback(async (url: string) => {
+    if (!url.startsWith("http")) return;
+    setScraping(true);
+    setScraped(false);
+    setScrapeError("");
+    try {
+      const result = await apiPost<JobScrapeResult>("/jobs/scrape", { url });
+      if (result.error) {
+        setScrapeError(result.error);
+        return;
+      }
+      if (result.title) setAddTitle(result.title);
+      if (result.company) setAddCompany(result.company);
+      if (result.description) setAddDescription(result.description);
+      if (result.location) setAddLocation(result.location);
+      if (result.source) setAddSource(result.source);
+      setScraped(true);
+    } catch (err) {
+      setScrapeError("Could not scrape this URL. You can still fill in the details manually.");
+      console.error("Scrape failed:", err);
+    } finally {
+      setScraping(false);
+    }
+  }, []);
+
+  const handleUrlChange = useCallback((value: string) => {
+    setAddUrl(value);
+    setScraped(false);
+    setScrapeError("");
+  }, []);
+
+  const handleUrlBlur = useCallback(() => {
+    if (addUrl.startsWith("http") && !scraped && !scraping && !addTitle) {
+      scrapeUrl(addUrl);
+    }
+  }, [addUrl, scraped, scraping, addTitle, scrapeUrl]);
+
+  const handleUrlPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData("text").trim();
+    if (pasted.startsWith("http")) {
+      // Let React update the input value first, then scrape
+      setTimeout(() => scrapeUrl(pasted), 100);
+    }
+  }, [scrapeUrl]);
+
   const addJob = async () => {
     setAddSaving(true);
     try {
@@ -75,19 +137,46 @@ export default function JobsPage() {
         url: addUrl,
         title: addTitle || null,
         company: addCompany || null,
+        description: addDescription || null,
+        location: addLocation || null,
         source: addSource || "manual",
       });
       setShowAddModal(false);
-      setAddUrl("");
-      setAddTitle("");
-      setAddCompany("");
-      setAddSource("");
+      resetAddForm();
       await fetchJobs();
     } catch (err) {
       console.error("Failed to add job:", err);
     } finally {
       setAddSaving(false);
     }
+  };
+
+  const importFromUrl = async () => {
+    setImporting(true);
+    setImportError("");
+    try {
+      await apiPost("/jobs/import", { url: importUrl });
+      setShowImportModal(false);
+      setImportUrl("");
+      await fetchJobs();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Import failed";
+      setImportError(message);
+      console.error("Import failed:", err);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const resetAddForm = () => {
+    setAddUrl("");
+    setAddTitle("");
+    setAddCompany("");
+    setAddDescription("");
+    setAddLocation("");
+    setAddSource("");
+    setScraped(false);
+    setScrapeError("");
   };
 
   const analyzeJob = async (id: string) => {
@@ -284,17 +373,27 @@ export default function JobsPage() {
           </p>
         </div>
         {canCreate && (
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors"
-            style={{
-              backgroundColor: "var(--primary)",
-              color: "var(--primary-foreground)",
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            Add Job
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <Download className="h-4 w-4" />
+              Import from URL
+            </button>
+            <button
+              onClick={() => { resetAddForm(); setShowAddModal(true); }}
+              className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: "var(--primary)",
+                color: "var(--primary-foreground)",
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Add Job
+            </button>
+          </div>
         )}
       </div>
 
@@ -325,24 +424,55 @@ export default function JobsPage() {
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Job URL *</label>
-                <input
-                  type="url"
-                  value={addUrl}
-                  onChange={(e) => setAddUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
-                  style={{
-                    backgroundColor: "var(--background)",
-                    borderColor: "var(--border)",
-                  }}
-                />
+                <div className="relative">
+                  <input
+                    type="url"
+                    value={addUrl}
+                    onChange={(e) => handleUrlChange(e.target.value)}
+                    onBlur={handleUrlBlur}
+                    onPaste={handleUrlPaste}
+                    placeholder="Paste a job listing URL to auto-fill details..."
+                    className="w-full rounded-md border px-3 py-2 pr-10 text-sm outline-none focus:ring-1 focus:ring-ring"
+                    style={{
+                      backgroundColor: "var(--background)",
+                      borderColor: "var(--border)",
+                    }}
+                  />
+                  {scraping && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--primary)" }} />
+                    </div>
+                  )}
+                  {scraped && !scraping && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <CheckCircle className="h-4 w-4" style={{ color: "#10b981" }} />
+                    </div>
+                  )}
+                </div>
+                {scraping && (
+                  <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                    Scraping job details... this may take a moment.
+                  </p>
+                )}
+                {scrapeError && (
+                  <p className="text-xs mt-1 flex items-center gap-1" style={{ color: "#ef4444" }}>
+                    <AlertCircle className="h-3 w-3" />
+                    {scrapeError}
+                  </p>
+                )}
+                {scraped && !scraping && (
+                  <p className="text-xs mt-1" style={{ color: "#10b981" }}>
+                    Job details auto-filled. Review and edit below.
+                  </p>
+                )}
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Title (optional)</label>
+                <label className="block text-sm font-medium mb-1">Title</label>
                 <input
                   type="text"
                   value={addTitle}
                   onChange={(e) => setAddTitle(e.target.value)}
+                  placeholder={scraping ? "Extracting..." : ""}
                   className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
                   style={{
                     backgroundColor: "var(--background)",
@@ -350,21 +480,36 @@ export default function JobsPage() {
                   }}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Company (optional)</label>
-                <input
-                  type="text"
-                  value={addCompany}
-                  onChange={(e) => setAddCompany(e.target.value)}
-                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
-                  style={{
-                    backgroundColor: "var(--background)",
-                    borderColor: "var(--border)",
-                  }}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Company</label>
+                  <input
+                    type="text"
+                    value={addCompany}
+                    onChange={(e) => setAddCompany(e.target.value)}
+                    className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                    style={{
+                      backgroundColor: "var(--background)",
+                      borderColor: "var(--border)",
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={addLocation}
+                    onChange={(e) => setAddLocation(e.target.value)}
+                    className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                    style={{
+                      backgroundColor: "var(--background)",
+                      borderColor: "var(--border)",
+                    }}
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Source (optional)</label>
+                <label className="block text-sm font-medium mb-1">Source</label>
                 <input
                   type="text"
                   value={addSource}
@@ -377,6 +522,21 @@ export default function JobsPage() {
                   }}
                 />
               </div>
+              {addDescription && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Description (scraped)</label>
+                  <textarea
+                    value={addDescription}
+                    onChange={(e) => setAddDescription(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring resize-y"
+                    style={{
+                      backgroundColor: "var(--background)",
+                      borderColor: "var(--border)",
+                    }}
+                  />
+                </div>
+              )}
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   onClick={() => setShowAddModal(false)}
@@ -387,7 +547,7 @@ export default function JobsPage() {
                 </button>
                 <button
                   onClick={addJob}
-                  disabled={!addUrl.trim() || addSaving}
+                  disabled={!addUrl.trim() || addSaving || scraping}
                   className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
                   style={{
                     backgroundColor: "var(--primary)",
@@ -396,6 +556,96 @@ export default function JobsPage() {
                 >
                   {addSaving && <Loader2 className="h-4 w-4 animate-spin" />}
                   Add Job
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import from URL Modal */}
+      {showImportModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setShowImportModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border p-6 shadow-lg"
+            style={{
+              backgroundColor: "var(--card)",
+              borderColor: "var(--border)",
+              color: "var(--card-foreground)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Import from URL</h2>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="rounded p-1 transition-colors hover:bg-accent"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
+              Paste a job listing URL and we will automatically scrape the details and create the listing for you.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Job URL</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2">
+                    <Globe className="h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
+                  </span>
+                  <input
+                    type="url"
+                    value={importUrl}
+                    onChange={(e) => { setImportUrl(e.target.value); setImportError(""); }}
+                    placeholder="https://www.linkedin.com/jobs/view/..."
+                    className="w-full rounded-md border pl-10 pr-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                    style={{
+                      backgroundColor: "var(--background)",
+                      borderColor: "var(--border)",
+                    }}
+                  />
+                </div>
+              </div>
+              {importError && (
+                <p className="text-xs flex items-center gap-1" style={{ color: "#ef4444" }}>
+                  <AlertCircle className="h-3 w-3 shrink-0" />
+                  {importError}
+                </p>
+              )}
+              {importing && (
+                <div className="flex items-center gap-2 rounded-md p-3 text-sm"
+                  style={{ backgroundColor: "var(--muted)" }}>
+                  <Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--primary)" }} />
+                  <span>Scraping and importing... this may take 15-30 seconds.</span>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={importFromUrl}
+                  disabled={!importUrl.trim() || !importUrl.startsWith("http") || importing}
+                  className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                  style={{
+                    backgroundColor: "var(--primary)",
+                    color: "var(--primary-foreground)",
+                  }}
+                >
+                  {importing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Import
                 </button>
               </div>
             </div>

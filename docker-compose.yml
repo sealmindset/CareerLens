@@ -64,10 +64,11 @@ services:
       - FRONTEND_URL=http://localhost:3300
       - BACKEND_URL=http://localhost:8300
       - AI_PROVIDER=${AI_PROVIDER:-anthropic_foundry}
-      - AI_MODEL_HEAVY=${AI_MODEL_HEAVY:-claude-opus-4-6}
-      - AI_MODEL_STANDARD=${AI_MODEL_STANDARD:-claude-sonnet-4-6}
-      - AI_MODEL_LIGHT=${AI_MODEL_LIGHT:-claude-haiku-4-5}
+      - AI_MODEL_HEAVY=${AI_MODEL_HEAVY:-cogdep-aifoundry-dev-eus2-claude-opus-4-6}
+      - AI_MODEL_STANDARD=${AI_MODEL_STANDARD:-cogdep-aifoundry-dev-eus2-claude-sonnet-4-5}
+      - AI_MODEL_LIGHT=${AI_MODEL_LIGHT:-cogdep-aifoundry-dev-eus2-claude-haiku-4-5}
       - AZURE_AI_FOUNDRY_ENDPOINT=${AZURE_AI_FOUNDRY_ENDPOINT:-}
+      - AZURE_AI_FOUNDRY_API_KEY=${AZURE_AI_FOUNDRY_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}

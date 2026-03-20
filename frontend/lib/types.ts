@@ -87,6 +87,18 @@ export interface ProfileEducation {
   created_at: string;
 }
 
+export interface JobScrapeResult {
+  title: string | null;
+  company: string | null;
+  location: string | null;
+  salary_range: string | null;
+  job_type: string | null;
+  description: string | null;
+  source: string | null;
+  requirements: { text: string; type: string }[] | null;
+  error: string | null;
+}
+
 export interface JobListing {
   id: string;
   user_id: string;

@@ -17,13 +17,14 @@ class Settings(BaseSettings):
 
     # AI Provider
     AI_PROVIDER: str = "anthropic_foundry"
-    AI_MODEL_HEAVY: str = "claude-opus-4-6"
-    AI_MODEL_STANDARD: str = "claude-sonnet-4-6"
-    AI_MODEL_LIGHT: str = "claude-haiku-4-5"
+    AI_MODEL_HEAVY: str = "cogdep-aifoundry-dev-eus2-claude-opus-4-6"
+    AI_MODEL_STANDARD: str = "cogdep-aifoundry-dev-eus2-claude-sonnet-4-5"
+    AI_MODEL_LIGHT: str = "cogdep-aifoundry-dev-eus2-claude-haiku-4-5"
 
     # Azure AI Foundry (when AI_PROVIDER=anthropic_foundry)
-    # Uses DefaultAzureCredential (managed identity / Azure CLI) -- no API key needed
+    # Uses API key if provided, otherwise falls back to DefaultAzureCredential
     AZURE_AI_FOUNDRY_ENDPOINT: str = ""
+    AZURE_AI_FOUNDRY_API_KEY: str = ""
 
     # Direct Anthropic (when AI_PROVIDER=anthropic)
     ANTHROPIC_API_KEY: str = ""
