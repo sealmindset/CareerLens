@@ -18,7 +18,7 @@
 - [ ] Add Playwright-based job application form auto-fill
 - [ ] Implement application follow-up reminders (email/notification)
 - [ ] Add resume version history per application
-- [ ] Add markdown rendering for agent artifacts (currently plain text)
+- [x] Add markdown rendering for agent artifacts (currently plain text)
 - [ ] Add artifact export (download as PDF/Word)
 - [ ] NeMo Guardrails AI safety testing suite
 

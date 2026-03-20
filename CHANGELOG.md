@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.0] - 2026-03-19
+
+### Added
+- Markdown rendering for agent artifacts and chat messages (react-markdown + remark-gfm)
+- MarkdownContent component with styled tables, code blocks, headings, lists, blockquotes, and links
+- GFM support: tables, strikethrough, task lists, and autolinks in AI-generated content
+
+### Fixed
+- Agent Workspace crash (TypeError: Q.find is not a function) caused by FastAPI route shadowing on preflight endpoint
+
 ## [0.5.0] - 2026-03-19
 
 ### Added

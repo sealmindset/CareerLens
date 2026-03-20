@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatRelative } from "@/lib/utils";
+import { MarkdownContent } from "@/components/markdown-content";
 import type {
   AgentConversation,
   AgentMessage,
@@ -705,9 +706,7 @@ export default function AgentsPage() {
                     backgroundColor: "var(--background)",
                   }}
                 >
-                  <pre className="whitespace-pre-wrap text-sm font-normal">
-                    {selectedArtifact.content}
-                  </pre>
+                  <MarkdownContent content={selectedArtifact.content} />
                 </div>
               </div>
             )}
@@ -872,7 +871,11 @@ export default function AgentsPage() {
                             msg.role === "user" ? "var(--primary-foreground)" : "var(--accent-foreground)",
                         }}
                       >
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        {msg.role === "assistant" ? (
+                          <MarkdownContent content={msg.content} className="text-sm" />
+                        ) : (
+                          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        )}
                         <p className="text-xs mt-1 opacity-60">{formatRelative(msg.created_at)}</p>
                       </div>
                     </div>
