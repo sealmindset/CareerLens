@@ -285,18 +285,6 @@ async def list_artifacts(
 
 # ─── Preflight endpoints ─────────────────────────────────────────────
 
-@router.get("/preflight/{agent_name}/{application_id}", response_model=PreflightResult)
-async def check_preflight(
-    agent_name: str,
-    application_id: uuid.UUID,
-    current_user: UserInfo = Depends(require_permission("workspace", "view")),
-    db: AsyncSession = Depends(get_db),
-):
-    """Check if an agent has all the data it needs for a specific application."""
-    user_id = await _get_user_id(db, current_user)
-    return await run_preflight(db, agent_name, user_id, application_id)
-
-
 @router.get("/preflight/all/{application_id}", response_model=list[PreflightResult])
 async def check_all_preflights(
     application_id: uuid.UUID,
@@ -310,6 +298,18 @@ async def check_all_preflights(
         result = await run_preflight(db, agent_name, user_id, application_id)
         results.append(result)
     return results
+
+
+@router.get("/preflight/{agent_name}/{application_id}", response_model=PreflightResult)
+async def check_preflight(
+    agent_name: str,
+    application_id: uuid.UUID,
+    current_user: UserInfo = Depends(require_permission("workspace", "view")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check if an agent has all the data it needs for a specific application."""
+    user_id = await _get_user_id(db, current_user)
+    return await run_preflight(db, agent_name, user_id, application_id)
 
 
 # ─── Agent task endpoints (user-directed mode) ───────────────────────

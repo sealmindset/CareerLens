@@ -15,6 +15,7 @@ Your app was tested automatically. Here's what happened:
 | API is responding | PASS |
 | Seed data populated | PASS |
 | Logout works | PASS |
+| Resume upload UI | PASS |
 
 ## Login Testing
 
@@ -22,8 +23,8 @@ Each type of user was tested:
 
 | User Type | Login | Dashboard | Endpoints | Admin Access | Result |
 |-----------|-------|-----------|-----------|-------------|--------|
-| Super Admin (mock-admin) | PASS | PASS | All 200 | Full access (25 perms) | PASS |
-| Admin (mock-manager) | PASS | PASS | All 200 | Users yes, Roles no (21 perms) | PASS |
+| Super Admin (mock-admin) | PASS | PASS | All 200 | Full access (27 perms) | PASS |
+| Admin (mock-manager) | PASS | PASS | All 200 | Users yes, Roles no (23 perms) | PASS |
 | Pro User (mock-pro) | PASS | PASS | All 200 | No admin (16 perms) | PASS |
 | User (mock-user) | PASS | PASS | All 200 | No admin (5 perms) | PASS |
 
@@ -31,35 +32,53 @@ Each type of user was tested:
 
 | Page | Super Admin | Admin | Pro User | User | Notes |
 |------|-------------|-------|----------|------|-------|
-| Dashboard | PASS | PASS | PASS | PASS | Shows 15 jobs, 5 apps, 10 skills |
-| Profile | PASS | PASS | PASS | PASS | 10 skills, 2 experiences, 1 education |
-| Jobs | PASS | PASS | PASS | PASS | 15 job listings with varied statuses |
-| Applications | PASS | PASS | PASS | PASS | 5 applications across different stages |
-| Agents | PASS | PASS | PASS | PASS | 6 AI agents, 3 seed conversations |
-| Settings | PASS | PASS | PASS | N/A | Shows AI provider configuration |
+| Dashboard | PASS | PASS | PASS | PASS | Shows jobs, apps, skills stats |
+| Profile | PASS | PASS | PASS | PASS | Resume upload visible, profile data populated |
+| Jobs | PASS | PASS | PASS | PASS | Job listings with Import from URL |
+| Applications | PASS | PASS | PASS | PASS | Pipeline tracker |
+| Agents | PASS | PASS | PASS | PASS | 6 AI agents with tiers |
+| Settings | PASS | PASS | PASS | N/A | AI provider configuration |
 | Admin Users | PASS | PASS | 403 | 403 | Correctly restricted |
 | Admin Roles | PASS | 403 | 403 | 403 | Correctly restricted |
 
-## Seed Data
+## New Feature: Resume Upload (v0.4.0)
 
-| Data Type | Count | Notes |
-|-----------|-------|-------|
-| Users | 4 | One per role, matching mock-oidc test users |
-| Job Listings | 15 | Varied companies, locations, salaries, statuses |
-| Applications | 5 | Draft, tailoring, submitted, interviewing stages |
-| Profile Skills | 10 | Python, TypeScript, React, Next.js, AWS, etc. |
-| Work Experience | 2 | Current + previous positions |
-| Education | 1 | BS Computer Science |
-| Agent Conversations | 3 | Scout, coach, strategist agents |
+The Profile page now includes drag-and-drop resume upload:
+- **Upload Resume** button in the Resume Text section
+- Supports PDF, Word (.docx), and plain text files
+- 10 MB file size limit
+- AI-powered parsing extracts headline, summary, skills, experience, and education
+- Extracted data auto-populates profile fields (skip duplicate skills)
+- Raw resume text stored for AI agents to reference later
+
+## Screenshots
+
+Screenshots saved in `.try-it/screenshots/`:
+- `01_login.png` - Login page with "Sign in with SSO"
+- `02_mock_oidc.png` - Mock OIDC user picker
+- `03_after_login.png` - Post-login redirect
+- `04_dashboard.png` - Dashboard with stats and quick actions
+- `05_profile.png` - Profile page with Upload Resume button
+- `06_jobs.png` - Job Listings with scraped Valvoline job
+- `07_applications.png` - Applications pipeline
+- `08_agents.png` - AI Agents console (6 agents)
 
 ## How to Access Your App
 
 - **Open your browser to:** http://localhost:3300
-- **To log in:** Click "Sign In" and pick a user from the login screen:
+- **To log in:** Click "Sign in with SSO" and pick a user from the login screen:
   - **Admin User** (admin@career-lens.local) -- Full access including user/role management
   - **Manager User** (manager@career-lens.local) -- All features plus user management
   - **Pro User** (pro@career-lens.local) -- Full job search features, no admin
   - **Regular User** (user@career-lens.local) -- View-only access
+
+## To Test Resume Upload
+
+1. Log in and go to **My Profile**
+2. Scroll down to the **Resume Text** section
+3. Click **Upload Resume** or drag-and-drop a PDF/Word/text file
+4. AI will parse the document and auto-fill skills, experience, and education
+5. A summary will show how many skills, experiences, and educations were added
 
 ## Services Running
 
