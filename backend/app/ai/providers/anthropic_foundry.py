@@ -1,64 +1,101 @@
-import logging
+"""Azure AI Foundry provider using httpx with Bearer auth.
 
-from anthropic import AsyncAnthropic
+Azure AI Foundry requires Authorization: Bearer <token> (not x-api-key).
+We use direct httpx calls against the Anthropic-compatible /v1/messages endpoint.
+"""
+
+import logging
+from typing import AsyncIterator
+
+import httpx
+
+from app.ai.azure_token import get_fresh_az_token
 from app.ai.provider import AIProvider
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+_ANTHROPIC_VERSION = "2023-06-01"
 
-def _resolve_api_key() -> str:
-    """Resolve API key: use AZURE_AI_FOUNDRY_API_KEY if set, else DefaultAzureCredential."""
+
+def _get_bearer_token() -> str:
+    """Get a Bearer token: prefer fresh MSAL token, fall back to API key."""
+    token = get_fresh_az_token()
+    if token:
+        return token
     if settings.AZURE_AI_FOUNDRY_API_KEY:
         return settings.AZURE_AI_FOUNDRY_API_KEY
-    try:
-        from azure.identity import DefaultAzureCredential
-        credential = DefaultAzureCredential()
-        token = credential.get_token("https://cognitiveservices.azure.com/.default")
-        return token.token
-    except Exception as e:
-        logger.error("Azure AI Foundry auth failed: no API key and DefaultAzureCredential unavailable: %s", e)
-        raise ValueError(
-            "AZURE_AI_FOUNDRY_API_KEY is not set and DefaultAzureCredential failed. "
-            "Set the API key in .env or run 'az login' for Azure CLI auth."
-        ) from e
+    raise ValueError(
+        "No Azure AI Foundry credentials available. "
+        "Run 'az login' or set AZURE_AI_FOUNDRY_API_KEY in .env."
+    )
+
+
+def _build_headers(token: str) -> dict:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "anthropic-version": _ANTHROPIC_VERSION,
+    }
 
 
 class AnthropicFoundryProvider(AIProvider):
-    """Azure AI Foundry provider using Anthropic SDK with base_url override.
-
-    Supports dual-mode auth: API key (preferred) or DefaultAzureCredential fallback.
-    """
+    """Azure AI Foundry provider using httpx with Bearer auth."""
 
     def __init__(self):
-        self.client = AsyncAnthropic(
-            api_key=_resolve_api_key(),
-            base_url=settings.AZURE_AI_FOUNDRY_ENDPOINT,
-        )
+        endpoint = settings.AZURE_AI_FOUNDRY_ENDPOINT.rstrip("/")
+        self.messages_url = f"{endpoint}/v1/messages"
 
     async def complete(self, system_prompt, user_prompt, model=None, temperature=0.7, max_tokens=4096):
         model = model or settings.AI_MODEL_STANDARD
-        response = await self.client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        return response.content[0].text
+        token = _get_bearer_token()
 
-    async def stream(self, system_prompt, user_prompt, model=None, temperature=0.7, max_tokens=4096):
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(
+                self.messages_url,
+                headers=_build_headers(token),
+                json={
+                    "model": model,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "system": system_prompt,
+                    "messages": [{"role": "user", "content": user_prompt}],
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["content"][0]["text"]
+
+    async def stream(self, system_prompt, user_prompt, model=None, temperature=0.7, max_tokens=4096) -> AsyncIterator[str]:
         model = model or settings.AI_MODEL_STANDARD
-        async with self.client.messages.stream(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_prompt},
-            ],
-        ) as stream:
-            async for text in stream.text_stream:
-                yield text
+        token = _get_bearer_token()
+
+        async with httpx.AsyncClient(timeout=120) as client:
+            async with client.stream(
+                "POST",
+                self.messages_url,
+                headers=_build_headers(token),
+                json={
+                    "model": model,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "system": system_prompt,
+                    "messages": [{"role": "user", "content": user_prompt}],
+                    "stream": True,
+                },
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        import json
+                        chunk = line[6:]
+                        if chunk.strip() == "[DONE]":
+                            break
+                        try:
+                            event = json.loads(chunk)
+                            if event.get("type") == "content_block_delta":
+                                delta = event.get("delta", {})
+                                if delta.get("type") == "text_delta":
+                                    yield delta["text"]
+                        except json.JSONDecodeError:
+                            continue

@@ -46,13 +46,7 @@ const mainNavItems: NavItem[] = [
     permission: { resource: "jobs", action: "view" },
   },
   {
-    label: "Applications",
-    href: "/applications",
-    icon: FileText,
-    permission: { resource: "applications", action: "view" },
-  },
-  {
-    label: "AI Agents",
+    label: "Application Studio",
     href: "/agents",
     icon: Bot,
     permission: { resource: "agents", action: "view" },

@@ -10,6 +10,7 @@ import type {
   AgentMessage,
   AgentWorkspace,
   Application,
+  JobListing,
   PreflightResult,
   AgentTaskResult,
   PipelineRun,
@@ -134,11 +135,11 @@ const statusIcon = (status: string) => {
   return <Circle className="h-4 w-4 text-yellow-500" />;
 };
 
-type ViewMode = "grid" | "chat" | "workspace";
+type ViewMode = "chat" | "workspace";
 
 export default function AgentsPage() {
   const { hasPermission } = useAuth();
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("workspace");
 
   // Chat state
   const [activeAgent, setActiveAgent] = useState<AgentDef | null>(null);
@@ -153,7 +154,9 @@ export default function AgentsPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Workspace state
+  const [jobListings, setJobListings] = useState<JobListing[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [selectedJob, setSelectedJob] = useState<JobListing | null>(null);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<AgentWorkspace | null>(null);
   const [preflights, setPreflights] = useState<PreflightResult[]>([]);
@@ -189,7 +192,6 @@ export default function AgentsPage() {
     return groups;
   };
 
-  const canChat = hasPermission("agents", "chat") || hasPermission("agents", "view");
   const canWorkspace = hasPermission("workspace", "create") || hasPermission("workspace", "view");
 
   const scrollToBottom = () => {
@@ -200,14 +202,23 @@ export default function AgentsPage() {
     scrollToBottom();
   }, [messages]);
 
-  // Load applications for workspace mode
+  // Load job listings and applications for workspace mode
   useEffect(() => {
-    if (viewMode === "workspace" && applications.length === 0) {
-      apiGet<Application[]>("/applications")
-        .then(setApplications)
-        .catch(() => setApplications([]));
+    if (viewMode === "workspace" && jobListings.length === 0) {
+      Promise.all([
+        apiGet<JobListing[]>("/jobs"),
+        apiGet<Application[]>("/applications"),
+      ])
+        .then(([jobs, apps]) => {
+          setJobListings(jobs);
+          setApplications(apps);
+        })
+        .catch(() => {
+          setJobListings([]);
+          setApplications([]);
+        });
     }
-  }, [viewMode, applications.length]);
+  }, [viewMode, jobListings.length]);
 
   // --- Chat functions ---
 
@@ -234,14 +245,6 @@ export default function AgentsPage() {
       setLoadingMessages(false);
     }
   }, []);
-
-  const openAgent = async (agent: AgentDef) => {
-    setActiveAgent(agent);
-    setActiveConversation(null);
-    setMessages([]);
-    setViewMode("chat");
-    await fetchConversations(agent.name);
-  };
 
   const openConversation = async (convo: AgentConversation) => {
     setActiveConversation(convo);
@@ -317,8 +320,8 @@ export default function AgentsPage() {
 
   // --- Workspace functions ---
 
-  const loadWorkspace = async (appId: string) => {
-    setSelectedAppId(appId);
+  const loadWorkspace = async (job: JobListing) => {
+    setSelectedJob(job);
     setLoadingWorkspace(true);
     setWorkspace(null);
     setPreflights([]);
@@ -326,12 +329,32 @@ export default function AgentsPage() {
     setSelectedArtifact(null);
 
     try {
+      // Find existing application or create one
+      let app = applications.find((a) => a.job_listing_id === job.id);
+      if (!app) {
+        try {
+          app = await apiPost<Application>("/applications", {
+            job_listing_id: job.id,
+            status: "draft",
+          });
+          setApplications((prev) => [...prev, app!]);
+        } catch (err: unknown) {
+          // 409 = application already exists, fetch all and find it
+          const freshApps = await apiGet<Application[]>("/applications");
+          setApplications(freshApps);
+          app = freshApps.find((a) => a.job_listing_id === job.id);
+          if (!app) throw err;
+        }
+      }
+
+      setSelectedAppId(app.id);
+
       // Create or get workspace
-      const ws = await apiPost<AgentWorkspace>("/agents/workspaces", { application_id: appId });
+      const ws = await apiPost<AgentWorkspace>("/agents/workspaces", { application_id: app.id });
       setWorkspace(ws);
 
       // Load preflights for all agents
-      const pf = await apiGet<PreflightResult[]>(`/agents/preflight/all/${appId}`);
+      const pf = await apiGet<PreflightResult[]>(`/agents/preflight/all/${app.id}`);
       setPreflights(pf);
     } catch (err) {
       console.error("Failed to load workspace:", err);
@@ -393,120 +416,65 @@ export default function AgentsPage() {
     }
   };
 
-  // ─── Agent grid view ───────────────────────────────────────────────
-
-  if (viewMode === "grid") {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">AI Agents</h1>
-            <p style={{ color: "var(--muted-foreground)" }}>
-              Chat with agents or run them against a job application for comprehensive deliverables.
-            </p>
-          </div>
-          {canWorkspace && (
-            <button
-              onClick={() => setViewMode("workspace")}
-              className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors"
-              style={{
-                backgroundColor: "var(--primary)",
-                color: "var(--primary-foreground)",
-              }}
-            >
-              <Briefcase className="h-4 w-4" />
-              Agent Workspace
-            </button>
-          )}
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {agents.map((agent) => (
-            <button
-              key={agent.name}
-              onClick={() => openAgent(agent)}
-              className="rounded-xl border p-6 text-left transition-colors hover:border-primary/50"
-              style={{
-                backgroundColor: "var(--card)",
-                borderColor: "var(--border)",
-                color: "var(--card-foreground)",
-              }}
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: `${agent.color}20`, color: agent.color }}
-                >
-                  <agent.icon className="h-5 w-5" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold">{agent.name}</h3>
-                  {tierBadge(agent.modelTier)}
-                </div>
-              </div>
-              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                {agent.description}
-              </p>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Workspace view ────────────────────────────────────────────────
+  // ─── Workspace view (main landing) ─────────────────────────────────
 
   if (viewMode === "workspace") {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => { setViewMode("grid"); setWorkspace(null); setSelectedAppId(null); }}
-            className="rounded p-1 transition-colors hover:bg-accent"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Agent Workspace</h1>
-            <p style={{ color: "var(--muted-foreground)" }}>
-              Run AI agents against a job application for comprehensive analysis and deliverables.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Application Studio</h1>
+          <p style={{ color: "var(--muted-foreground)" }}>
+            Select a job listing and let AI agents craft your application — tailored resume, cover letter, interview prep, and more.
+          </p>
         </div>
 
-        {/* Application selector */}
+        {/* Job listing selector */}
         {!workspace && (
           <div
             className="rounded-xl border p-6"
             style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
           >
-            <h2 className="font-semibold mb-4">Select a Job Application</h2>
-            {applications.length === 0 ? (
+            <h2 className="font-semibold mb-4">Select a Job Listing</h2>
+            {jobListings.length === 0 ? (
               <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                No applications yet. Create a job application first from the Applications page.
+                No job listings yet. Add a job listing first from the Job Listings page.
               </p>
             ) : (
               <div className="space-y-2">
-                {applications.map((app) => (
-                  <button
-                    key={app.id}
-                    onClick={() => loadWorkspace(app.id)}
-                    disabled={loadingWorkspace}
-                    className="w-full flex items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-accent"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <Briefcase className="h-5 w-5 shrink-0" style={{ color: "var(--primary)" }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">
-                        {app.job_title || "Untitled"} at {app.job_company || "Unknown"}
-                      </p>
-                      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                        Status: {app.status} &middot; {formatRelative(app.created_at)}
-                      </p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "var(--muted-foreground)" }} />
-                  </button>
-                ))}
+                {jobListings.map((job) => {
+                  const existingApp = applications.find((a) => a.job_listing_id === job.id);
+                  return (
+                    <button
+                      key={job.id}
+                      onClick={() => loadWorkspace(job)}
+                      disabled={loadingWorkspace}
+                      className="w-full flex items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-accent"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <Briefcase className="h-5 w-5 shrink-0" style={{ color: "var(--primary)" }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">
+                          {job.title || "Untitled"} at {job.company || "Unknown"}
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                          {job.match_score !== null && (
+                            <span className="mr-2">Match: {job.match_score}%</span>
+                          )}
+                          {job.location && <span className="mr-2">{job.location}</span>}
+                          {existingApp && (
+                            <span
+                              className="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                              style={{ backgroundColor: "rgba(16,185,129,0.1)", color: "rgb(5,150,105)" }}
+                            >
+                              Application started
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "var(--muted-foreground)" }} />
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -518,8 +486,58 @@ export default function AgentsPage() {
           </div>
         )}
 
-        {workspace && (
+        {workspace && (() => {
+          const currentApp = applications.find((a) => a.id === selectedAppId);
+          return (
           <>
+            {/* Application context banner */}
+            {selectedJob && (
+              <div
+                className="rounded-xl border p-5 flex items-center gap-4"
+                style={{
+                  backgroundColor: "var(--card)",
+                  borderColor: "var(--primary)",
+                  borderWidth: "2px",
+                }}
+              >
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-lg shrink-0"
+                  style={{ backgroundColor: "rgba(var(--primary-rgb, 59,130,246), 0.1)" }}
+                >
+                  <Briefcase className="h-6 w-6" style={{ color: "var(--primary)" }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="font-semibold text-lg truncate">
+                    {selectedJob.title || "Untitled Position"}
+                  </h2>
+                  <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                    {selectedJob.company || "Unknown Company"}
+                    {selectedJob.match_score !== null && (
+                      <span className="ml-2">Match: {selectedJob.match_score}%</span>
+                    )}
+                    {currentApp && (
+                      <span
+                        className="inline-flex ml-2 rounded-full px-2 py-0.5 text-xs font-medium"
+                        style={{
+                          backgroundColor: "rgba(59,130,246,0.1)",
+                          color: "rgb(59,130,246)",
+                        }}
+                      >
+                        {currentApp.status}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setWorkspace(null); setSelectedAppId(null); setSelectedJob(null); }}
+                  className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent shrink-0"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  Change
+                </button>
+              </div>
+            )}
+
             {/* Pipeline controls */}
             <div
               className="rounded-xl border p-6"
@@ -527,13 +545,6 @@ export default function AgentsPage() {
             >
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-semibold">Run Agent Pipeline</h2>
-                <button
-                  onClick={() => { setWorkspace(null); setSelectedAppId(null); }}
-                  className="text-sm underline"
-                  style={{ color: "var(--muted-foreground)" }}
-                >
-                  Change application
-                </button>
               </div>
               <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
                 Run all agents automatically in sequence, or pick individual agents below.
@@ -890,7 +901,8 @@ export default function AgentsPage() {
               </div>
             )}
           </>
-        )}
+          );
+        })()}
       </div>
     );
   }
@@ -905,7 +917,7 @@ export default function AgentsPage() {
         style={{ borderColor: "var(--border)" }}
       >
         <button
-          onClick={() => { setActiveAgent(null); setViewMode("grid"); }}
+          onClick={() => { setActiveAgent(null); setViewMode("workspace"); }}
           className="rounded p-1 transition-colors hover:bg-accent"
         >
           <ArrowLeft className="h-4 w-4" />

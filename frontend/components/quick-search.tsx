@@ -28,15 +28,9 @@ const navigationItems: SearchItem[] = [
     permission: { resource: "jobs", action: "view" },
   },
   {
-    label: "Applications",
-    href: "/applications",
-    keywords: ["applications", "pipeline", "tracker", "status"],
-    permission: { resource: "applications", action: "view" },
-  },
-  {
-    label: "AI Agents",
+    label: "Application Studio",
     href: "/agents",
-    keywords: ["agents", "ai", "scout", "tailor", "coach", "strategist"],
+    keywords: ["applications", "studio", "agents", "ai", "scout", "tailor", "coach", "strategist", "pipeline", "workspace"],
     permission: { resource: "agents", action: "view" },
   },
   {
