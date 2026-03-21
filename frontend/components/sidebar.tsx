@@ -16,6 +16,7 @@ import {
   UserCircle,
   Settings,
   MessageSquareCode,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -83,6 +84,12 @@ const adminNavItems: NavItem[] = [
     href: "/admin/prompts",
     icon: MessageSquareCode,
     permission: { resource: "prompts", action: "view" },
+  },
+  {
+    label: "Settings",
+    href: "/admin/settings",
+    icon: SlidersHorizontal,
+    permission: { resource: "app_settings", action: "view" },
   },
 ];
 

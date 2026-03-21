@@ -1,41 +1,290 @@
-from fastapi import APIRouter, Depends
+import uuid
 
-from app.config import settings
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings as env_settings
+from app.database import get_db
 from app.middleware.permissions import require_permission
+from app.models.app_setting import AppSetting, AppSettingAuditLog
 from app.schemas.auth import UserInfo
+from app.schemas.setting import (
+    AppSettingAuditOut,
+    AppSettingBulkUpdate,
+    AppSettingOut,
+    AppSettingUpdate,
+)
+from app.services.settings_service import invalidate_cache
 
-router = APIRouter(prefix="/api/settings", tags=["settings"])
+router = APIRouter(prefix="/api/admin/settings", tags=["settings"])
+
+# Keep the old read-only endpoint for the user-facing Settings page
+legacy_router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
-@router.get("")
-async def get_settings(
+def _mask_value(setting: AppSetting) -> str | None:
+    """Return masked value for sensitive settings."""
+    if setting.is_sensitive and setting.value:
+        return "********"
+    return setting.value
+
+
+def _effective_value(setting: AppSetting) -> str | None:
+    """Return the effective value: DB value if set, otherwise .env fallback."""
+    if setting.value is not None and setting.value != "":
+        return setting.value
+    # Fall back to .env
+    env_val = getattr(env_settings, setting.key, None)
+    if env_val is not None and str(env_val) != "":
+        return str(env_val)
+    return setting.value
+
+
+def _to_out(setting: AppSetting, reveal: bool = False) -> AppSettingOut:
+    """Convert model to output schema with masking and fallback."""
+    effective = _effective_value(setting)
+    display_val = effective
+    if setting.is_sensitive and not reveal and effective:
+        display_val = "********"
+    return AppSettingOut(
+        id=str(setting.id),
+        key=setting.key,
+        value=display_val,
+        group_name=setting.group_name,
+        display_name=setting.display_name,
+        description=setting.description,
+        value_type=setting.value_type,
+        is_sensitive=setting.is_sensitive,
+        requires_restart=setting.requires_restart,
+        updated_by=setting.updated_by,
+        updated_at=setting.updated_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoints (require app_settings.view / app_settings.edit)
+# ---------------------------------------------------------------------------
+
+
+@router.get("", response_model=list[AppSettingOut])
+async def list_settings(
+    group: str | None = Query(None, description="Filter by group name"),
+    current_user: UserInfo = Depends(require_permission("app_settings", "view")),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all application settings (sensitive values masked)."""
+    query = select(AppSetting).order_by(AppSetting.group_name, AppSetting.key)
+    if group:
+        query = query.where(AppSetting.group_name == group)
+    result = await db.execute(query)
+    settings_list = result.scalars().all()
+    return [_to_out(s) for s in settings_list]
+
+
+@router.get("/audit/log", response_model=list[AppSettingAuditOut])
+async def get_audit_log(
+    setting_id: uuid.UUID | None = Query(None),
+    limit: int = Query(50, le=200),
+    current_user: UserInfo = Depends(require_permission("app_settings", "view")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get setting change audit log."""
+    query = (
+        select(AppSettingAuditLog)
+        .join(AppSetting)
+        .order_by(AppSettingAuditLog.created_at.desc())
+        .limit(limit)
+    )
+    if setting_id:
+        query = query.where(AppSettingAuditLog.setting_id == setting_id)
+
+    result = await db.execute(query)
+    logs = result.scalars().all()
+
+    # Get setting keys for display
+    setting_ids_set = {log.setting_id for log in logs}
+    if setting_ids_set:
+        settings_result = await db.execute(
+            select(AppSetting).where(AppSetting.id.in_(setting_ids_set))
+        )
+        key_map = {s.id: s.key for s in settings_result.scalars().all()}
+    else:
+        key_map = {}
+
+    return [
+        AppSettingAuditOut(
+            id=str(log.id),
+            setting_key=key_map.get(log.setting_id),
+            old_value=log.old_value,
+            new_value=log.new_value,
+            changed_by=log.changed_by,
+            created_at=log.created_at,
+        )
+        for log in logs
+    ]
+
+
+@router.get("/{setting_id}", response_model=AppSettingOut)
+async def get_setting_detail(
+    setting_id: uuid.UUID,
+    current_user: UserInfo = Depends(require_permission("app_settings", "view")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a single setting by ID (sensitive values masked)."""
+    result = await db.execute(
+        select(AppSetting).where(AppSetting.id == setting_id)
+    )
+    setting = result.scalar_one_or_none()
+    if not setting:
+        raise HTTPException(status_code=404, detail="Setting not found")
+    return _to_out(setting)
+
+
+@router.get("/{setting_id}/reveal", response_model=AppSettingOut)
+async def reveal_setting(
+    setting_id: uuid.UUID,
+    current_user: UserInfo = Depends(require_permission("app_settings", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reveal the actual value of a sensitive setting (requires edit permission)."""
+    result = await db.execute(
+        select(AppSetting).where(AppSetting.id == setting_id)
+    )
+    setting = result.scalar_one_or_none()
+    if not setting:
+        raise HTTPException(status_code=404, detail="Setting not found")
+    return _to_out(setting, reveal=True)
+
+
+@router.put("/{setting_id}", response_model=AppSettingOut)
+async def update_setting(
+    setting_id: uuid.UUID,
+    data: AppSettingUpdate,
+    current_user: UserInfo = Depends(require_permission("app_settings", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a single setting value."""
+    result = await db.execute(
+        select(AppSetting).where(AppSetting.id == setting_id)
+    )
+    setting = result.scalar_one_or_none()
+    if not setting:
+        raise HTTPException(status_code=404, detail="Setting not found")
+
+    old_value = setting.value
+
+    # Don't update if the submitted value is the mask placeholder
+    new_value = data.value
+    if setting.is_sensitive and new_value == "********":
+        # User didn't change it, keep existing
+        return _to_out(setting)
+
+    # Create audit log (mask sensitive values in audit)
+    audit_old = "********" if setting.is_sensitive and old_value else old_value
+    audit_new = "********" if setting.is_sensitive and new_value else new_value
+    audit = AppSettingAuditLog(
+        setting_id=setting.id,
+        old_value=audit_old,
+        new_value=audit_new,
+        changed_by=current_user.email,
+    )
+    db.add(audit)
+
+    setting.value = new_value
+    setting.updated_by = current_user.email
+
+    invalidate_cache()
+    await db.commit()
+    await db.refresh(setting)
+    return _to_out(setting)
+
+
+@router.put("", response_model=list[AppSettingOut])
+async def bulk_update_settings(
+    data: AppSettingBulkUpdate,
+    current_user: UserInfo = Depends(require_permission("app_settings", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk update multiple settings at once."""
+    result = await db.execute(select(AppSetting))
+    all_settings = {s.key: s for s in result.scalars().all()}
+
+    updated = []
+    for key, new_value in data.settings.items():
+        setting = all_settings.get(key)
+        if not setting:
+            continue
+
+        # Skip if masked value submitted (no change)
+        if setting.is_sensitive and new_value == "********":
+            updated.append(setting)
+            continue
+
+        old_value = setting.value
+        if old_value == new_value:
+            updated.append(setting)
+            continue
+
+        # Audit
+        audit_old = "********" if setting.is_sensitive and old_value else old_value
+        audit_new = "********" if setting.is_sensitive and new_value else new_value
+        audit = AppSettingAuditLog(
+            setting_id=setting.id,
+            old_value=audit_old,
+            new_value=audit_new,
+            changed_by=current_user.email,
+        )
+        db.add(audit)
+
+        setting.value = new_value
+        setting.updated_by = current_user.email
+        updated.append(setting)
+
+    invalidate_cache()
+    await db.commit()
+
+    # Refresh all updated settings
+    for s in updated:
+        await db.refresh(s)
+
+    return [_to_out(s) for s in updated]
+
+
+# ---------------------------------------------------------------------------
+# Legacy read-only endpoint (user-facing Settings page)
+# ---------------------------------------------------------------------------
+
+
+@legacy_router.get("")
+async def get_settings_legacy(
     current_user: UserInfo = Depends(require_permission("settings", "view")),
 ):
-    """Get app settings including AI provider configuration."""
+    """Get app settings including AI provider configuration (legacy endpoint)."""
     provider_config = {
-        "provider": settings.AI_PROVIDER,
-        "base_url": settings.AZURE_AI_FOUNDRY_ENDPOINT or None,
+        "provider": env_settings.AI_PROVIDER,
+        "base_url": env_settings.AZURE_AI_FOUNDRY_ENDPOINT or None,
         "models": {
-            "heavy": settings.AI_MODEL_HEAVY,
-            "standard": settings.AI_MODEL_STANDARD,
-            "light": settings.AI_MODEL_LIGHT,
+            "heavy": env_settings.AI_MODEL_HEAVY,
+            "standard": env_settings.AI_MODEL_STANDARD,
+            "light": env_settings.AI_MODEL_LIGHT,
         },
     }
 
     tier_assignments = [
         {
             "tier": "heavy",
-            "model": settings.AI_MODEL_HEAVY,
+            "model": env_settings.AI_MODEL_HEAVY,
             "description": "Complex reasoning: Tailor, Coach, Strategist agents",
         },
         {
             "tier": "standard",
-            "model": settings.AI_MODEL_STANDARD,
+            "model": env_settings.AI_MODEL_STANDARD,
             "description": "Analysis & research: Scout, Brand Advisor agents",
         },
         {
             "tier": "light",
-            "model": settings.AI_MODEL_LIGHT,
+            "model": env_settings.AI_MODEL_LIGHT,
             "description": "Form filling & coordination: Coordinator agent",
         },
     ]

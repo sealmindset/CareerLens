@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.12.0] - 2026-03-20
+
+### Added
+- Database-backed application settings: all .env variables now configurable via Admin UI
+- `app_settings` table stores key/value pairs with group, type, sensitivity, and restart metadata
+- `app_setting_audit_logs` table tracks who changed what, when, with old/new values
+- Settings service with in-memory cache (60s TTL) and .env fallback: DB value wins if set, otherwise falls back to .env, then code default
+- Admin Settings page (`/admin/settings`) with tabbed interface for 7 setting groups: Database, Authentication, Security, URLs, AI Provider, RAG/Embeddings, Mock Services
+- Sensitive values (API keys, secrets) masked by default with eye icon to reveal (requires edit permission)
+- Settings that require server restart are tagged with "restart required" badge and show a warning banner when modified
+- Bulk save: update all settings in a group at once
+- Audit Log modal showing full change history with old/new value diffs
+- RBAC: `app_settings.view` and `app_settings.edit` permissions granted to Super Admin and Admin roles
+- Alembic migration 010: creates tables, seeds all 23 settings, adds permissions
+
 ## [0.11.0] - 2026-03-20
 
 ### Added

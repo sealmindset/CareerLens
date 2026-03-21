@@ -9,6 +9,7 @@ from app.models.agent_conversation import AgentConversation, AgentMessage
 from app.models.managed_prompt import ManagedPrompt, PromptVersion, PromptAuditLog
 from app.models.workspace import AgentWorkspace, WorkspaceArtifact, PipelineRun
 from app.models.embedding import ProfileChunk
+from app.models.app_setting import AppSetting, AppSettingAuditLog
 
 __all__ = [
     "Base", "User", "Role", "Permission", "RolePermission",
@@ -18,4 +19,5 @@ __all__ = [
     "ManagedPrompt", "PromptVersion", "PromptAuditLog",
     "AgentWorkspace", "WorkspaceArtifact", "PipelineRun",
     "ProfileChunk",
+    "AppSetting", "AppSettingAuditLog",
 ]

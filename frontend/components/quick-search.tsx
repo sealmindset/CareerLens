@@ -63,6 +63,12 @@ const navigationItems: SearchItem[] = [
     keywords: ["prompts", "ai", "system", "templates", "admin"],
     permission: { resource: "prompts", action: "view" },
   },
+  {
+    label: "Application Settings",
+    href: "/admin/settings",
+    keywords: ["settings", "config", "env", "environment", "database", "ai", "oidc", "admin"],
+    permission: { resource: "app_settings", action: "view" },
+  },
 ];
 
 export function QuickSearch() {
