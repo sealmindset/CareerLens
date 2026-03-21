@@ -21,6 +21,11 @@ async def run_tailor_task(context: AgentContext) -> list[WorkspaceArtifact]:
     # Task 1: Tailored Resume
     resume_prompt = """Rewrite the candidate's resume specifically tailored for this job listing.
 
+CRITICAL: The output must be a CLEAN, SUBMISSION-READY resume that can be sent directly to
+an employer or parsed by an ATS. Do NOT include any commentary, rationale, analysis, notes,
+explanations, blockquotes, or "why this matters" annotations. No text that starts with ">".
+The resume should look exactly like what a candidate would submit -- nothing more.
+
 RULES:
 - NEVER fabricate experience, skills, or achievements
 - Reframe existing experience to highlight relevance to this specific role
@@ -28,6 +33,8 @@ RULES:
 - Quantify achievements where the data exists (don't invent numbers)
 - Optimize for ATS (Applicant Tracking Systems) by including exact keyword matches
 - Maintain the candidate's authentic voice
+- NO commentary, notes, or explanations mixed into the resume content
+- NO blockquotes (lines starting with ">") anywhere in the output
 
 STRUCTURE the tailored resume as:
 1. **Professional Summary** -- 3-4 sentences tailored to this role
@@ -39,9 +46,8 @@ STRUCTURE the tailored resume as:
 For each experience entry, include:
 - The original title and company (unchanged)
 - Rewritten bullet points that emphasize relevance to the target role
-- A brief note on WHY this experience matters for the target role
 
-Format as clean markdown ready to be converted to a document."""
+Format as clean markdown ready to be converted to a professional document."""
 
     resume_response = await call_agent_ai(
         context.db, "tailor", resume_prompt, context

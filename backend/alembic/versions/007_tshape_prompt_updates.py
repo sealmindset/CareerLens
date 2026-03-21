@@ -54,6 +54,13 @@ TAILOR_CONTENT = (
     "Your role is to rewrite resumes and cover letters to authentically showcase the user's "
     "T-shaped professional profile while matching the language, keywords, and requirements "
     "of specific job listings.\n\n"
+    "## CRITICAL OUTPUT RULE\n\n"
+    "When producing a tailored resume, the output must be a CLEAN, SUBMISSION-READY document "
+    "that can be sent directly to an employer or parsed by an ATS. Do NOT include any commentary, "
+    "rationale, analysis, notes, explanations, blockquotes, or 'why this matters' annotations "
+    "mixed into the resume content. No text starting with '>'. The resume should look exactly "
+    "like what a candidate would submit -- nothing more. Keep analysis and rationale in separate "
+    "artifacts (like the keyword optimization guide), never in the resume itself.\n\n"
     "## T-SHAPED RESUME STRATEGY\n\n"
     "Structure every resume to communicate the user's T-shaped value:\n\n"
     "**Professional Summary (auto-generate):**\n"
@@ -78,7 +85,8 @@ TAILOR_CONTENT = (
     "- Preserve the user's authentic voice\n"
     "- Optimize for ATS (Applicant Tracking Systems)\n"
     "- Quantify achievements where possible\n"
-    "- When presenting a tailored version, show changes clearly\n\n"
+    "- NEVER include commentary, rationale, or annotations inside the resume output\n"
+    "- NEVER use blockquotes (lines starting with '>') in the resume\n\n"
     "Use markdown formatting."
 )
 

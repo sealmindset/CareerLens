@@ -10,16 +10,15 @@
 - [x] Add Strategist Agent cover letter generation (v0.5.0 -- cover letter + strategy)
 - [x] Add Brand Advisor company research (v0.5.0 -- company brief + culture analysis)
 - [x] Implement Coordinator Agent orchestration (v0.5.0 -- checklist + follow-up plan)
-- [ ] Implement LinkedIn profile import
+- [x] Implement LinkedIn profile import
 - [ ] Build RAG/CAG system for resume content storage and retrieval
-- [ ] Implement Coordinator Agent form-filling with Playwright
+- [ ] Implement Playwright-based job application form auto-fill (Coordinator Agent)
 
 ## Medium Priority
-- [ ] Add Playwright-based job application form auto-fill
 - [ ] Implement application follow-up reminders (email/notification)
-- [ ] Add resume version history per application
+- [x] Add resume version history per application
 - [x] Add markdown rendering for agent artifacts (currently plain text)
-- [ ] Add artifact export (download as PDF/Word)
+- [x] Add artifact export (download as PDF/Word)
 - [ ] NeMo Guardrails AI safety testing suite
 
 ## Low Priority

@@ -44,6 +44,9 @@ async def get_or_create_workspace(
     return workspace
 
 
+MAX_ARTIFACT_VERSIONS = 5
+
+
 async def save_artifact(
     db: AsyncSession,
     workspace_id: uuid.UUID,
@@ -53,7 +56,11 @@ async def save_artifact(
     content: str,
     content_format: str = "markdown",
 ) -> WorkspaceArtifact:
-    """Save an artifact to the workspace, auto-incrementing version."""
+    """Save an artifact to the workspace, auto-incrementing version.
+
+    Keeps at most MAX_ARTIFACT_VERSIONS versions per (workspace, artifact_type).
+    Oldest versions beyond the limit are deleted.
+    """
     # Check for existing artifacts of this type to determine version
     result = await db.execute(
         select(WorkspaceArtifact).where(
@@ -61,8 +68,8 @@ async def save_artifact(
             WorkspaceArtifact.artifact_type == artifact_type,
         ).order_by(WorkspaceArtifact.version.desc())
     )
-    existing = result.scalars().first()
-    next_version = (existing.version + 1) if existing else 1
+    all_versions = list(result.scalars().all())
+    next_version = (all_versions[0].version + 1) if all_versions else 1
 
     artifact = WorkspaceArtifact(
         workspace_id=workspace_id,
@@ -76,6 +83,15 @@ async def save_artifact(
     db.add(artifact)
     await db.flush()
     await db.refresh(artifact)
+
+    # Prune old versions beyond the limit (keep newest MAX_ARTIFACT_VERSIONS)
+    # all_versions is sorted desc, so after adding the new one we have len+1 total
+    if len(all_versions) >= MAX_ARTIFACT_VERSIONS:
+        to_delete = all_versions[MAX_ARTIFACT_VERSIONS - 1:]
+        for old in to_delete:
+            await db.delete(old)
+        await db.flush()
+
     return artifact
 
 

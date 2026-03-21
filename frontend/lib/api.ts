@@ -85,6 +85,29 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return handleResponse<T>(response);
 }
 
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: "GET",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new ApiError(
+      body || `Download failed with status ${response.status}`,
+      response.status,
+    );
+  }
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
 export async function apiUpload<T>(
   path: string,
   file: File,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiDownload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatRelative } from "@/lib/utils";
 import { MarkdownContent } from "@/components/markdown-content";
@@ -35,6 +35,9 @@ import {
   Circle,
   FileText,
   ChevronRight,
+  ChevronDown,
+  Download,
+  History,
 } from "lucide-react";
 
 interface AgentDef {
@@ -147,7 +150,32 @@ export default function AgentsPage() {
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const [taskResult, setTaskResult] = useState<AgentTaskResult | null>(null);
   const [selectedArtifact, setSelectedArtifact] = useState<WorkspaceArtifact | null>(null);
+  const [expandedHistoryKeys, setExpandedHistoryKeys] = useState<Set<string>>(new Set());
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
+
+  const toggleHistory = (key: string) => {
+    setExpandedHistoryKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  /** Group artifacts by (agent_name, artifact_type), sorted newest first within each group. */
+  const groupArtifacts = (artifacts: WorkspaceArtifact[]) => {
+    const groups = new Map<string, WorkspaceArtifact[]>();
+    for (const art of artifacts) {
+      const key = `${art.agent_name}::${art.artifact_type}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(art);
+    }
+    // Sort each group by version descending (newest first)
+    for (const [, arts] of groups) {
+      arts.sort((a, b) => b.version - a.version);
+    }
+    return groups;
+  };
 
   const canChat = hasPermission("agents", "chat") || hasPermission("agents", "view");
   const canWorkspace = hasPermission("workspace", "create") || hasPermission("workspace", "view");
@@ -582,22 +610,65 @@ export default function AgentsPage() {
                         </div>
                       )}
 
-                      {/* Existing artifacts */}
-                      {artifacts.length > 0 && (
-                        <div className="mb-3 space-y-1">
-                          {artifacts.map((art) => (
-                            <button
-                              key={art.id}
-                              onClick={() => setSelectedArtifact(art)}
-                              className="flex items-center gap-2 text-xs w-full text-left hover:underline"
-                              style={{ color: "var(--primary)" }}
-                            >
-                              <FileText className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{art.title}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      {/* Existing artifacts -- grouped by type, latest shown, older collapsible */}
+                      {artifacts.length > 0 && (() => {
+                        const groups = groupArtifacts(artifacts);
+                        return (
+                          <div className="mb-3 space-y-2">
+                            {Array.from(groups.entries()).map(([groupKey, arts]) => {
+                              const latest = arts[0];
+                              const older = arts.slice(1);
+                              const isExpanded = expandedHistoryKeys.has(groupKey);
+                              return (
+                                <div key={groupKey}>
+                                  <button
+                                    onClick={() => setSelectedArtifact(latest)}
+                                    className="flex items-center gap-2 text-xs w-full text-left hover:underline"
+                                    style={{ color: "var(--primary)" }}
+                                  >
+                                    <FileText className="h-3 w-3 shrink-0" />
+                                    <span className="truncate">{latest.title}</span>
+                                    <span className="shrink-0 text-[10px] opacity-60">v{latest.version}</span>
+                                  </button>
+                                  {older.length > 0 && (
+                                    <>
+                                      <button
+                                        onClick={() => toggleHistory(groupKey)}
+                                        className="flex items-center gap-1 text-[10px] ml-5 mt-0.5"
+                                        style={{ color: "var(--muted-foreground)" }}
+                                      >
+                                        {isExpanded ? (
+                                          <ChevronDown className="h-2.5 w-2.5" />
+                                        ) : (
+                                          <ChevronRight className="h-2.5 w-2.5" />
+                                        )}
+                                        <History className="h-2.5 w-2.5" />
+                                        {older.length} previous version{older.length > 1 ? "s" : ""}
+                                      </button>
+                                      {isExpanded && (
+                                        <div className="ml-5 mt-1 space-y-0.5 border-l pl-2" style={{ borderColor: "var(--border)" }}>
+                                          {older.map((art) => (
+                                            <button
+                                              key={art.id}
+                                              onClick={() => setSelectedArtifact(art)}
+                                              className="flex items-center gap-2 text-[11px] w-full text-left hover:underline"
+                                              style={{ color: "var(--muted-foreground)" }}
+                                            >
+                                              <FileText className="h-2.5 w-2.5 shrink-0" />
+                                              <span className="truncate">v{art.version}</span>
+                                              <span className="shrink-0 text-[10px] opacity-50">{formatRelative(art.created_at)}</span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
 
                       <div className="flex gap-2">
                         <button
@@ -685,19 +756,88 @@ export default function AgentsPage() {
               >
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="font-semibold">{selectedArtifact.title}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">{selectedArtifact.title}</h3>
+                      <span
+                        className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        style={{
+                          backgroundColor: "rgba(59,130,246,0.1)",
+                          color: "rgb(59,130,246)",
+                        }}
+                      >
+                        v{selectedArtifact.version}
+                      </span>
+                      {workspace && (() => {
+                        const groupKey = `${selectedArtifact.agent_name}::${selectedArtifact.artifact_type}`;
+                        const groups = groupArtifacts(workspace.artifacts);
+                        const group = groups.get(groupKey);
+                        const isLatest = group && group[0].id === selectedArtifact.id;
+                        if (!isLatest) {
+                          return (
+                            <span
+                              className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium"
+                              style={{ backgroundColor: "rgba(234,179,8,0.15)", color: "rgb(161,98,7)" }}
+                            >
+                              older version
+                            </span>
+                          );
+                        }
+                        return (
+                          <span
+                            className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium"
+                            style={{ backgroundColor: "rgba(16,185,129,0.1)", color: "rgb(5,150,105)" }}
+                          >
+                            latest
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
                       By {agentByKey[selectedArtifact.agent_name]?.name || selectedArtifact.agent_name} &middot;
-                      v{selectedArtifact.version} &middot; {formatRelative(selectedArtifact.created_at)}
+                      {formatRelative(selectedArtifact.created_at)}
                     </p>
                   </div>
-                  <button
-                    onClick={() => setSelectedArtifact(null)}
-                    className="text-sm underline"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
-                    Close
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {workspace && (
+                      <>
+                        <button
+                          onClick={() =>
+                            apiDownload(
+                              `/agents/workspaces/${workspace.id}/artifacts/${selectedArtifact.id}/export?format=docx`,
+                              `${selectedArtifact.title.replace(/\s+/g, "_")}.docx`,
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+                          style={{ borderColor: "var(--border)" }}
+                          title="Download as Word document"
+                        >
+                          <Download className="h-3 w-3" />
+                          DOCX
+                        </button>
+                        <button
+                          onClick={() =>
+                            apiDownload(
+                              `/agents/workspaces/${workspace.id}/artifacts/${selectedArtifact.id}/export?format=pdf`,
+                              `${selectedArtifact.title.replace(/\s+/g, "_")}.pdf`,
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+                          style={{ borderColor: "var(--border)" }}
+                          title="Download as PDF"
+                        >
+                          <Download className="h-3 w-3" />
+                          PDF
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => setSelectedArtifact(null)}
+                      className="text-sm underline"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
                 <div
                   className="prose prose-sm max-w-none rounded-lg border p-4 overflow-auto max-h-[60vh]"

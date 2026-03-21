@@ -18,6 +18,7 @@ from app.schemas.profile import (
     EducationCreate, EducationOut,
     ExperienceAIRequest, ExperienceAIResponse,
 )
+from app.services.linkedin_parser import parse_linkedin_export
 from app.services.resume_parser import parse_resume
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
@@ -389,6 +390,128 @@ async def upload_resume(
     await db.commit()
     await db.refresh(profile)
 
+    return ResumeUploadResult(
+        profile=ProfileOut.model_validate(profile),
+        skills_added=skills_added,
+        experiences_added=experiences_added,
+        educations_added=educations_added,
+        raw_text_length=len(raw_text),
+        error=result.get("error"),
+    )
+
+
+@router.post("/import-linkedin", response_model=ResumeUploadResult)
+async def import_linkedin(
+    file: UploadFile = File(...),
+    current_user: UserInfo = Depends(require_permission("profile", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import profile data from a LinkedIn data export ZIP file.
+
+    Users get this file from LinkedIn Settings → Data Privacy → Get a copy of your data.
+    The ZIP contains CSV files (Profile.csv, Positions.csv, Education.csv, Skills.csv).
+    """
+    if not file.filename:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file provided")
+
+    if not file.filename.lower().endswith(".zip"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please upload a ZIP file. LinkedIn's data export is a .zip archive.",
+        )
+
+    contents = await file.read()
+    if len(contents) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 50 MB)")
+
+    user_id = await _get_user_id(db, current_user)
+    profile = await _get_or_create_profile(db, user_id)
+
+    result = parse_linkedin_export(contents)
+
+    if "error" in result and result["error"] and "raw_text" not in result:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=result["error"])
+
+    skills_added = 0
+    experiences_added = 0
+    educations_added = 0
+
+    # Update profile fields (only if currently empty)
+    if result.get("headline") and not profile.headline:
+        profile.headline = result["headline"]
+    if result.get("summary") and not profile.summary:
+        profile.summary = result["summary"]
+
+    # Add skills (skip duplicates)
+    existing_skill_names = {s.skill_name.lower() for s in profile.skills}
+    for skill_data in result.get("skills", []):
+        name = skill_data.get("skill_name", "").strip()
+        if not name or name.lower() in existing_skill_names:
+            continue
+        proficiency = skill_data.get("proficiency_level", "intermediate")
+        if proficiency not in ("beginner", "intermediate", "advanced", "expert"):
+            proficiency = "intermediate"
+        skill = ProfileSkill(
+            profile_id=profile.id,
+            skill_name=name,
+            proficiency_level=proficiency,
+            years_experience=skill_data.get("years_experience"),
+            source="linkedin",
+        )
+        db.add(skill)
+        existing_skill_names.add(name.lower())
+        skills_added += 1
+
+    # Add experiences (skip duplicates by company+title)
+    existing_exps = {
+        (e.company.lower(), e.title.lower()) for e in profile.experiences
+    }
+    for exp_data in result.get("experiences", []):
+        company = exp_data.get("company", "").strip()
+        title = exp_data.get("title", "").strip()
+        if not company or not title:
+            continue
+        if (company.lower(), title.lower()) in existing_exps:
+            continue
+        exp = ProfileExperience(
+            profile_id=profile.id,
+            company=company,
+            title=title,
+            description=exp_data.get("description"),
+            start_date=_parse_date(exp_data.get("start_date")),
+            end_date=_parse_date(exp_data.get("end_date")),
+            is_current=bool(exp_data.get("is_current", False)),
+        )
+        db.add(exp)
+        existing_exps.add((company.lower(), title.lower()))
+        experiences_added += 1
+
+    # Add educations (skip duplicates by institution+degree)
+    existing_edus = {
+        (e.institution.lower(), (e.degree or "").lower()) for e in profile.educations
+    }
+    for edu_data in result.get("educations", []):
+        institution = edu_data.get("institution", "").strip()
+        if not institution:
+            continue
+        degree = (edu_data.get("degree") or "").strip()
+        if (institution.lower(), degree.lower()) in existing_edus:
+            continue
+        edu = ProfileEducation(
+            profile_id=profile.id,
+            institution=institution,
+            degree=degree or None,
+            field_of_study=edu_data.get("field_of_study"),
+            graduation_date=_parse_date(edu_data.get("graduation_date")),
+        )
+        db.add(edu)
+        existing_edus.add((institution.lower(), degree.lower()))
+        educations_added += 1
+
+    await db.commit()
+    await db.refresh(profile)
+
+    raw_text = result.get("raw_text", "")
     return ResumeUploadResult(
         profile=ProfileOut.model_validate(profile),
         skills_added=skills_added,

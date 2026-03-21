@@ -52,6 +52,12 @@ export default function ProfilePage() {
   const [uploadError, setUploadError] = useState("");
   const [dragOver, setDragOver] = useState(false);
 
+  // LinkedIn import
+  const [linkedinImporting, setLinkedinImporting] = useState(false);
+  const [linkedinResult, setLinkedinResult] = useState<ResumeUploadResult | null>(null);
+  const [linkedinError, setLinkedinError] = useState("");
+  const [showLinkedinImport, setShowLinkedinImport] = useState(false);
+
   // Skill form
   const [showSkillForm, setShowSkillForm] = useState(false);
   const [skillName, setSkillName] = useState("");
@@ -191,6 +197,43 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (file) handleResumeUpload(file);
     e.target.value = "";
+  };
+
+  const handleLinkedinImport = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      setLinkedinError("Please upload a ZIP file from LinkedIn's data export.");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setLinkedinError("File too large (max 50 MB).");
+      return;
+    }
+    setLinkedinImporting(true);
+    setLinkedinError("");
+    setLinkedinResult(null);
+    try {
+      const result = await apiUpload<ResumeUploadResult>("/profile/import-linkedin", file);
+      setLinkedinResult(result);
+      await fetchProfile();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Import failed";
+      setLinkedinError(message);
+    } finally {
+      setLinkedinImporting(false);
+    }
+  };
+
+  const handleLinkedinFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleLinkedinImport(file);
+    e.target.value = "";
+  };
+
+  const handleLinkedinDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleLinkedinImport(file);
   };
 
   const addSkill = async () => {
@@ -559,6 +602,146 @@ export default function ProfilePage() {
             borderColor: "var(--border)",
           }}
         />
+      </div>
+
+      {/* LinkedIn Import */}
+      <div
+        className="rounded-xl border p-6"
+        style={{
+          backgroundColor: "var(--card)",
+          borderColor: "var(--border)",
+          color: "var(--card-foreground)",
+        }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <label className="text-sm font-medium">
+            <LinkIcon className="inline h-4 w-4 mr-1" />
+            LinkedIn Data Import
+          </label>
+          {canEdit && (
+            <button
+              onClick={() => {
+                setShowLinkedinImport(!showLinkedinImport);
+                setLinkedinResult(null);
+                setLinkedinError("");
+              }}
+              className="inline-flex items-center gap-1 text-sm font-medium transition-colors"
+              style={{ color: "var(--primary)" }}
+            >
+              <Upload className="h-4 w-4" />
+              {showLinkedinImport ? "Cancel" : "Import from LinkedIn"}
+            </button>
+          )}
+        </div>
+
+        {!showLinkedinImport && (
+          <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+            Import your skills, experience, and education from LinkedIn&apos;s data export.
+          </p>
+        )}
+
+        {showLinkedinImport && (
+          <div className="space-y-3">
+            {/* Instructions */}
+            <div
+              className="rounded-md border p-3 text-xs space-y-1"
+              style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)" }}
+            >
+              <p className="font-medium text-sm">How to get your LinkedIn data:</p>
+              <ol className="list-decimal list-inside space-y-0.5" style={{ color: "var(--muted-foreground)" }}>
+                <li>Go to <strong>LinkedIn Settings &amp; Privacy</strong></li>
+                <li>Click <strong>Data privacy</strong> &rarr; <strong>Get a copy of your data</strong></li>
+                <li>Select the data you want (Profile, Positions, Education, Skills)</li>
+                <li>Click <strong>Request archive</strong> -- LinkedIn will email you a download link</li>
+                <li>Download the ZIP file and upload it here</li>
+              </ol>
+            </div>
+
+            {/* Drop zone */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleLinkedinDrop}
+              className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
+                dragOver ? "border-primary bg-primary/5" : ""
+              }`}
+              style={{
+                borderColor: dragOver ? "var(--primary)" : "var(--border)",
+              }}
+            >
+              {linkedinImporting ? (
+                <>
+                  <Loader2 className="h-8 w-8 animate-spin mb-2" style={{ color: "var(--primary)" }} />
+                  <p className="text-sm font-medium">Importing LinkedIn data...</p>
+                  <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                    Parsing your profile, experience, education, and skills
+                  </p>
+                </>
+              ) : (
+                <>
+                  <LinkIcon className="h-8 w-8 mb-2" style={{ color: "var(--muted-foreground)" }} />
+                  <p className="text-sm font-medium">
+                    Drag and drop your LinkedIn export ZIP here
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                    ZIP file from LinkedIn&apos;s &quot;Download your data&quot; feature
+                  </p>
+                  <label
+                    className="mt-3 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium cursor-pointer transition-colors"
+                    style={{
+                      backgroundColor: "var(--primary)",
+                      color: "var(--primary-foreground)",
+                    }}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Choose ZIP File
+                    <input
+                      type="file"
+                      accept=".zip"
+                      onChange={handleLinkedinFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+
+            {/* Import result */}
+            {linkedinResult && !linkedinResult.error && (
+              <div
+                className="flex items-start gap-3 rounded-md border p-3"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)" }}
+              >
+                <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: "hsl(142, 76%, 36%)" }} />
+                <div className="text-sm">
+                  <p className="font-medium">LinkedIn data imported successfully!</p>
+                  <p style={{ color: "var(--muted-foreground)" }}>
+                    Added {linkedinResult.skills_added} skill{linkedinResult.skills_added !== 1 ? "s" : ""},
+                    {" "}{linkedinResult.experiences_added} experience{linkedinResult.experiences_added !== 1 ? "s" : ""},
+                    {" "}{linkedinResult.educations_added} education{linkedinResult.educations_added !== 1 ? "s" : ""}.
+                    {" "}Duplicates were skipped automatically.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Import error */}
+            {(linkedinError || linkedinResult?.error) && (
+              <div
+                className="flex items-start gap-3 rounded-md border p-3"
+                style={{ borderColor: "hsl(0, 84%, 60%)", backgroundColor: "hsl(0, 84%, 97%)" }}
+              >
+                <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: "hsl(0, 84%, 60%)" }} />
+                <div className="text-sm">
+                  <p className="font-medium" style={{ color: "hsl(0, 84%, 40%)" }}>Import failed</p>
+                  <p style={{ color: "hsl(0, 84%, 40%)" }}>
+                    {linkedinError || linkedinResult?.error}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Resume Upload */}

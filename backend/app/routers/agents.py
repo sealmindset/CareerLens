@@ -1,7 +1,8 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +13,7 @@ from app.middleware.auth import get_current_user
 from app.middleware.permissions import require_permission
 from app.models.agent_conversation import AgentConversation, AgentMessage
 from app.models.user import User
-from app.models.workspace import AgentWorkspace
+from app.models.workspace import AgentWorkspace, WorkspaceArtifact
 from app.schemas.agent import ConversationCreate, ConversationOut, MessageCreate, MessageOut
 from app.schemas.auth import UserInfo
 from app.schemas.workspace import (
@@ -29,6 +30,7 @@ from app.services.agent_preflight import AGENT_REQUIREMENTS, run_preflight
 from app.services.agents import AGENT_RUNNERS
 from app.services.agents.base import load_agent_context
 from app.services.agents.pipeline import run_pipeline
+from app.services.export_service import export_to_docx, export_to_pdf
 from app.services.workspace_service import get_artifacts, get_or_create_workspace
 
 logger = logging.getLogger(__name__)
@@ -281,6 +283,67 @@ async def list_artifacts(
 
     artifacts = await get_artifacts(db, workspace_id, artifact_type, agent_name)
     return artifacts
+
+
+# ─── Artifact export endpoints ───────────────────────────────────────
+
+@router.get("/workspaces/{workspace_id}/artifacts/{artifact_id}/export")
+async def export_artifact(
+    workspace_id: uuid.UUID,
+    artifact_id: uuid.UUID,
+    format: str = Query(..., pattern="^(pdf|docx)$"),
+    current_user: UserInfo = Depends(require_permission("workspace", "view")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export a workspace artifact as PDF or DOCX."""
+    user_id = await _get_user_id(db, current_user)
+
+    # Verify workspace ownership
+    ws_result = await db.execute(
+        select(AgentWorkspace).where(
+            AgentWorkspace.id == workspace_id,
+            AgentWorkspace.user_id == user_id,
+        )
+    )
+    if not ws_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    # Load artifact
+    art_result = await db.execute(
+        select(WorkspaceArtifact).where(
+            WorkspaceArtifact.id == artifact_id,
+            WorkspaceArtifact.workspace_id == workspace_id,
+        )
+    )
+    artifact = art_result.scalar_one_or_none()
+    if not artifact:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+
+    # Generate safe filename from artifact title
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in artifact.title).strip()
+    safe_title = safe_title.replace(" ", "_") or "document"
+
+    try:
+        if format == "pdf":
+            content_bytes = export_to_pdf(artifact.content)
+            media_type = "application/pdf"
+            filename = f"{safe_title}.pdf"
+        else:
+            content_bytes = export_to_docx(artifact.content)
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            filename = f"{safe_title}.docx"
+    except Exception as e:
+        logger.error("Export failed for artifact %s: %s", artifact_id, str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Document export failed",
+        )
+
+    return Response(
+        content=content_bytes,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ─── Preflight endpoints ─────────────────────────────────────────────
