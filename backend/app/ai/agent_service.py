@@ -128,7 +128,7 @@ async def _build_application_context(
     application_id: uuid.UUID,
 ) -> str:
     """Build context string from the application's job listing, user profile, and workspace artifacts."""
-    from app.services.agents.base import format_job_context, format_profile_context
+    from app.services.agents.base import format_job_context, format_profile_context, format_profile_context_with_rag
     from app.services.workspace_service import build_workspace_context
 
     parts = []
@@ -138,8 +138,23 @@ async def _build_application_context(
         select(Profile).where(Profile.user_id == user_id)
     )
     profile = prof_result.scalar_one_or_none()
+
+    # Load application for RAG query context
+    app_result_for_rag = await db.execute(
+        select(Application).where(Application.id == application_id)
+    )
+    app_for_rag = app_result_for_rag.scalar_one_or_none()
+
     if profile:
-        parts.append(format_profile_context(profile))
+        # Use RAG if we have job context for the query
+        if app_for_rag and app_for_rag.job_listing:
+            job = app_for_rag.job_listing
+            rag_query = f"{job.title} at {job.company}"
+            if job.description:
+                rag_query += " " + job.description[:500]
+            parts.append(await format_profile_context_with_rag(db, profile, rag_query))
+        else:
+            parts.append(format_profile_context(profile))
 
     # Load application with job listing
     app_result = await db.execute(

@@ -11,8 +11,8 @@
 - [x] Add Brand Advisor company research (v0.5.0 -- company brief + culture analysis)
 - [x] Implement Coordinator Agent orchestration (v0.5.0 -- checklist + follow-up plan)
 - [x] Implement LinkedIn profile import
-- [ ] Build RAG/CAG system for resume content storage and retrieval
-- [ ] Implement Playwright-based job application form auto-fill (Coordinator Agent)
+- [x] Build RAG/CAG system for resume content storage and retrieval
+- [x] Implement Playwright-based job application form auto-fill (Coordinator Agent)
 
 ## Medium Priority
 - [ ] Implement application follow-up reminders (email/notification)

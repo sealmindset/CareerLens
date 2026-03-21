@@ -57,6 +57,9 @@ class JobListing(Base):
     )
     match_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     match_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    application_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    application_platform: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    application_method_details: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

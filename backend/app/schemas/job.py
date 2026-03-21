@@ -28,6 +28,9 @@ class JobScrapeResult(BaseModel):
     description: str | None = None
     source: str | None = None
     requirements: list[dict] | None = None
+    application_method: str | None = None
+    application_platform: str | None = None
+    application_method_details: str | None = None
     error: str | None = None
 
 
@@ -51,6 +54,9 @@ class JobListingUpdate(BaseModel):
     job_type: str | None = None
     source: str | None = None
     status: str | None = None
+    application_method: str | None = None
+    application_platform: str | None = None
+    application_method_details: str | None = None
 
 
 class JobListingOut(BaseModel):
@@ -69,6 +75,9 @@ class JobListingOut(BaseModel):
     status: str
     match_score: float | None = None
     match_analysis: str | None = None
+    application_method: str | None = None
+    application_platform: str | None = None
+    application_method_details: str | None = None
     created_at: datetime
     updated_at: datetime
     requirements: list[JobRequirementOut] = []

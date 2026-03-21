@@ -19,6 +19,7 @@ from app.schemas.profile import (
     ExperienceAIRequest, ExperienceAIResponse,
 )
 from app.services.linkedin_parser import parse_linkedin_export
+from app.services.rag_service import index_profile
 from app.services.resume_parser import parse_resume
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
@@ -72,7 +73,28 @@ async def update_profile(
 
     await db.commit()
     await db.refresh(profile)
+
+    # Re-index profile for RAG
+    try:
+        await index_profile(db, profile)
+        await db.commit()
+    except Exception:
+        pass  # Non-critical -- RAG indexing failure shouldn't block profile updates
+
     return profile
+
+
+@router.post("/reindex", status_code=status.HTTP_200_OK)
+async def reindex_profile(
+    current_user: UserInfo = Depends(require_permission("profile", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-index profile content for RAG retrieval."""
+    user_id = await _get_user_id(db, current_user)
+    profile = await _get_or_create_profile(db, user_id)
+    count = await index_profile(db, profile)
+    await db.commit()
+    return {"chunks_indexed": count}
 
 
 @router.post("/skills", response_model=SkillOut, status_code=status.HTTP_201_CREATED)
@@ -390,6 +412,13 @@ async def upload_resume(
     await db.commit()
     await db.refresh(profile)
 
+    # Re-index for RAG after resume upload
+    try:
+        await index_profile(db, profile)
+        await db.commit()
+    except Exception:
+        pass
+
     return ResumeUploadResult(
         profile=ProfileOut.model_validate(profile),
         skills_added=skills_added,
@@ -510,6 +539,13 @@ async def import_linkedin(
 
     await db.commit()
     await db.refresh(profile)
+
+    # Re-index for RAG after LinkedIn import
+    try:
+        await index_profile(db, profile)
+        await db.commit()
+    except Exception:
+        pass
 
     raw_text = result.get("raw_text", "")
     return ResumeUploadResult(

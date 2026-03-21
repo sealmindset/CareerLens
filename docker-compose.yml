@@ -72,6 +72,13 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-keyword}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-1536}
+      - RAG_CHUNK_SIZE=${RAG_CHUNK_SIZE:-500}
+      - RAG_CHUNK_OVERLAP=${RAG_CHUNK_OVERLAP:-50}
+      - RAG_TOP_K=${RAG_TOP_K:-10}
+      - MOCK_OLIVIA_URL=${MOCK_OLIVIA_URL:-http://mock-olivia:10091}
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s
@@ -85,7 +92,7 @@ services:
   # Database (PostgreSQL)
   # --------------------------------------------------------------------------
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     ports:
       - "5600:5432"
     environment:
@@ -146,25 +153,29 @@ services:
     networks:
       - app-network
 
-  # [ADDITIONAL_MOCK_SERVICES]
   # --------------------------------------------------------------------------
-  # Example: Mock Jira
+  # Mock Olivia (Paradox.ai chatbot simulator)
   # --------------------------------------------------------------------------
-  # mock-jira:
-  #   build:
-  #     context: ./mock-services/mock-jira
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "[MOCK_JIRA_PORT]:8443"
-  #   profiles:
-  #     - dev
-  #   healthcheck:
-  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8443/health"]
-  #     interval: 5s
-  #     timeout: 3s
-  #     retries: 5
-  #   networks:
-  #     - app-network
+  mock-olivia:
+    build:
+      context: ./mock-services/mock-olivia
+      dockerfile: Dockerfile
+    ports:
+      - "10191:10091"
+    profiles:
+      - dev
+    environment:
+      - MOCK_OLIVIA_BOT_NAME=Megan
+      - MOCK_OLIVIA_COMPANY_NAME=TestCorp
+      - MOCK_OLIVIA_WIDGET_ID=mockwidget001
+      - MOCK_OLIVIA_EXTERNAL_URL=http://localhost:10191
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10091/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-network
 
 volumes:
   postgres_data:

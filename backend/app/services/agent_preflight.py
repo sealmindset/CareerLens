@@ -171,6 +171,12 @@ AGENT_REQUIREMENTS = {
         "description": "Orchestrates the full application process and tracks progress",
         "required": ["job_listing"],
         "optional": ["job_match_analysis", "tailored_resume", "cover_letter", "interview_prep_guide", "company_brief"],
+        "next_agent": "auto_fill",
+    },
+    "auto_fill": {
+        "description": "Analyzes application forms and generates an auto-fill script for your browser",
+        "required": ["profile_full", "job_listing"],
+        "optional": ["tailored_resume", "cover_letter"],
         "next_agent": None,
     },
 }
@@ -294,5 +300,9 @@ def _artifact_to_agent(artifact_type: str) -> str:
         "culture_analysis": "brand_advisor",
         "application_checklist": "coordinator",
         "follow_up_plan": "coordinator",
+        "form_fill_plan": "auto_fill",
+        "form_fill_script": "auto_fill",
+        "chatbot_transcript": "auto_fill",
+        "application_guide": "auto_fill",
     }
     return mapping.get(artifact_type, "unknown")

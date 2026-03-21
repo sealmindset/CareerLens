@@ -1,5 +1,84 @@
 # Changelog
 
+## [0.11.0] - 2026-03-20
+
+### Added
+- AI-powered application method detection: identifies how each employer accepts applications (form, chatbot, email, redirect, ATS portal)
+- Two-phase detection: instant domain-based lookup (30+ ATS/chatbot patterns) + AI-powered Playwright page analysis for unknown pages
+- Application method stored on job listings: `application_method`, `application_platform`, `application_method_details` columns
+- Detection runs automatically during job import (domain-only, fast) and at Auto-Fill runtime (full AI analysis if needed)
+- New `POST /api/jobs/{id}/detect-method` endpoint for on-demand detection with AI page analysis
+- Auto-Fill agent now dispatches to the correct handler based on detected method: chatbot driver, form analyzer, or AI-powered copy-paste guide
+- AI-powered email application guide: generates subject line, email body, attachment checklist, follow-up template
+- AI-powered redirect guide: generates step-by-step copy-paste data for job board redirects
+- AI-powered ATS portal guide: platform-specific guides for Workday, Taleo, iCIMS, SuccessFactors, BrassRing with copy-paste data blocks
+- Frontend: "Apply Method" column on jobs table with color-coded badges and icons
+- Frontend: application method details shown in expanded job view
+- Alembic migration 009: adds application method columns to job_listings table
+
+### Changed
+- Auto-Fill agent refactored from form-vs-chatbot to 5-method dispatch (form, chatbot, email, redirect, api_portal)
+- Job scraper now includes domain-based application method detection during scrape
+- Job import route stores detected application method on created listing
+
+## [0.10.0] - 2026-03-20
+
+### Added
+- Conversational chatbot driver for Paradox.ai/Olivia-style job applications
+- Chatbot driver: Playwright-based conversation automation that reads bot questions, maps them to profile data, types answers, and waits for responses
+- Keyword-based question-to-field mapping with regex rules for name, phone, email, work auth, sponsorship, experience, relocation, salary, and resume
+- AI fallback mapper for chatbot questions that keyword rules can't handle
+- Conversation completion detection (submitted/confirmed indicators)
+- Mock Olivia service: full Paradox.ai chatbot simulator with 10-step conversation state machine, API matching Paradox protocol, and interactive chat HTML page
+- Auto-Fill agent now detects chatbot URLs (paradox.ai) and dispatches to chatbot driver instead of form analyzer
+- Auto-Fill agent also falls back to chatbot driver when form analysis finds no fields
+- Chatbot transcript artifact: markdown conversation log with data summary table
+- Debug endpoints on mock-olivia for session inspection
+
+### Changed
+- Auto-Fill agent refactored to support both traditional forms and conversational chatbots
+- docker-compose.yml: added mock-olivia service (port 10191, dev profile)
+- Added MOCK_OLIVIA_URL environment variable to backend service
+
+## [0.9.0] - 2026-03-20
+
+### Added
+- Auto-Fill Agent: Playwright-based job application form auto-fill
+- Form analyzer service: headless Chromium navigates application URLs, extracts all form fields (inputs, textareas, selects, file uploads) with labels, types, and CSS selectors
+- AI-powered field mapping: maps profile data (name, email, experience, education, skills) to detected form fields with confidence scoring
+- JavaScript auto-fill script generation: creates a browser-ready script users paste into DevTools to fill forms on sites requiring login (Workday, Greenhouse, Lever, etc.)
+- Script handles React/Angular change detection via native value setters and event dispatching
+- Form fill plan artifact: markdown summary showing which fields will be auto-filled vs. require manual input
+- Generic fill guide fallback: when Playwright can't access a page, generates a comprehensive copy-paste guide
+- "Copy Script" button in artifact viewer for one-click clipboard copy of auto-fill scripts
+- Code-block rendering for JavaScript artifacts (vs. markdown for other artifacts)
+- Auto-Fill agent card in workspace with MousePointerClick icon
+- Preflight checks: requires full profile + job listing, suggests tailored resume + cover letter
+
+### Changed
+- Backend Dockerfile: added Playwright Chromium with system dependencies (playwright install --with-deps)
+- Coordinator agent now suggests Auto-Fill as next agent
+- Added playwright and its Chromium browser to Docker image
+
+## [0.8.0] - 2026-03-20
+
+### Added
+- RAG/CAG system for intelligent profile content retrieval
+- pgvector extension for PostgreSQL with HNSW index for vector similarity search
+- Semantic chunking of profile data (experiences, skills, education, summary, resume text)
+- Abstract EmbeddingProvider interface with OpenAI (text-embedding-3-small) and keyword fallback implementations
+- BM25-style keyword scoring for zero-config RAG (no API key required)
+- ProfileChunk model with vector(1536) column and keyword_tokens for hybrid retrieval
+- Automatic profile re-indexing on profile updates, resume uploads, and LinkedIn imports
+- POST /api/profile/reindex endpoint for manual re-indexing
+- RAG-enhanced agent context: agents now receive the most relevant profile sections based on job context instead of truncated full text
+- Configurable RAG settings: EMBEDDING_PROVIDER, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, RAG_TOP_K
+
+### Changed
+- PostgreSQL image switched from postgres:16-alpine to pgvector/pgvector:pg16
+- Agent context building (call_agent_ai) now uses RAG retrieval with graceful fallback to standard context
+- Conversation context building (_build_application_context) also uses RAG when job context is available
+
 ## [0.7.0] - 2026-03-19
 
 ### Added

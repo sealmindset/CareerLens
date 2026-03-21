@@ -126,6 +126,9 @@ export interface JobListing {
   status: string;
   match_score: number | null;
   match_analysis: string | null;
+  application_method: string | null;
+  application_platform: string | null;
+  application_method_details: string | null;
   requirements: JobRequirement[];
   created_at: string;
   updated_at: string;

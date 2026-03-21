@@ -160,4 +160,15 @@ async def scrape_job_url(url: str) -> dict:
     details["source"] = source
     details["url"] = url
 
+    # Detect application method (domain-based quick check; AI analysis deferred to auto-fill)
+    from app.services.application_detector import detect_application_method
+
+    try:
+        detection = await detect_application_method(url, use_ai=False)
+        details["application_method"] = detection.method
+        details["application_platform"] = detection.platform
+        details["application_method_details"] = detection.details
+    except Exception as e:
+        logger.warning("Application method detection failed: %s", str(e))
+
     return details

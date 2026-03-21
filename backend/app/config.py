@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     # Ollama (when AI_PROVIDER=ollama)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
+    # RAG / Embedding Configuration
+    # "openai" requires OPENAI_API_KEY; "keyword" uses BM25-style keyword matching (no API needed)
+    EMBEDDING_PROVIDER: str = "keyword"
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSIONS: int = 1536
+    RAG_CHUNK_SIZE: int = 500
+    RAG_CHUNK_OVERLAP: int = 50
+    RAG_TOP_K: int = 10
+
     # Secret enforcement
     ENFORCE_SECRETS: bool = False
 

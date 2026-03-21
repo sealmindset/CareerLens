@@ -17,6 +17,7 @@ from app.models.application import Application
 from app.models.job import JobListing
 from app.models.profile import Profile
 from app.models.workspace import WorkspaceArtifact
+from app.services.rag_service import format_rag_context, retrieve_relevant_chunks
 from app.services.workspace_service import build_workspace_context, get_artifacts, save_artifact
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,29 @@ def format_profile_context(profile: Profile | None) -> str:
     return "\n".join(parts)
 
 
+async def format_profile_context_with_rag(
+    db: AsyncSession,
+    profile: Profile | None,
+    query: str,
+) -> str:
+    """Format profile context using RAG retrieval for relevant content.
+
+    Falls back to the standard format_profile_context if no chunks are indexed.
+    """
+    if not profile:
+        return "No profile data available."
+
+    try:
+        chunks = await retrieve_relevant_chunks(db, profile.id, query)
+        if chunks:
+            return format_rag_context(chunks)
+    except Exception as e:
+        logger.warning("RAG retrieval failed, falling back to standard context: %s", e)
+
+    # Fallback to standard (truncated) context
+    return format_profile_context(profile)
+
+
 def format_job_context(job: JobListing) -> str:
     """Format job listing data as context for an agent prompt."""
     parts = ["## Target Job\n"]
@@ -173,8 +197,16 @@ async def call_agent_ai(
     # Build the full user prompt with all context
     parts = []
 
-    # Add profile context
-    parts.append(format_profile_context(context.profile))
+    # Build a RAG query from job title + description for relevance
+    rag_query = f"{context.job.title} at {context.job.company}"
+    if context.job.description:
+        rag_query += " " + context.job.description[:500]
+
+    # Add profile context (RAG-enhanced when available)
+    profile_ctx = await format_profile_context_with_rag(
+        context.db, context.profile, rag_query
+    )
+    parts.append(profile_ctx)
 
     # Add job context
     parts.append(format_job_context(context.job))

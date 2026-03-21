@@ -22,6 +22,9 @@ import {
   Target,
   Building,
   ClipboardList,
+  MousePointerClick,
+  Copy,
+  ClipboardCheck,
   ArrowLeft,
   Send,
   Loader2,
@@ -98,6 +101,14 @@ const agents: AgentDef[] = [
     modelTier: "premium",
     color: "rgb(249,115,22)",
   },
+  {
+    name: "Auto-Fill",
+    key: "auto_fill",
+    icon: MousePointerClick,
+    description: "Analyzes application forms and generates a browser auto-fill script for one-click form filling.",
+    modelTier: "premium",
+    color: "rgb(14,165,233)",
+  },
 ];
 
 const agentByKey = Object.fromEntries(agents.map((a) => [a.key, a]));
@@ -150,6 +161,7 @@ export default function AgentsPage() {
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const [taskResult, setTaskResult] = useState<AgentTaskResult | null>(null);
   const [selectedArtifact, setSelectedArtifact] = useState<WorkspaceArtifact | null>(null);
+  const [copiedScript, setCopiedScript] = useState(false);
   const [expandedHistoryKeys, setExpandedHistoryKeys] = useState<Set<string>>(new Set());
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
 
@@ -830,6 +842,27 @@ export default function AgentsPage() {
                         </button>
                       </>
                     )}
+                    {selectedArtifact.content_format === "javascript" && (
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedArtifact.content);
+                          setCopiedScript(true);
+                          setTimeout(() => setCopiedScript(false), 2000);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+                        style={{
+                          borderColor: copiedScript ? "rgb(16,185,129)" : "var(--border)",
+                          color: copiedScript ? "rgb(16,185,129)" : undefined,
+                        }}
+                        title="Copy auto-fill script to clipboard"
+                      >
+                        {copiedScript ? (
+                          <><ClipboardCheck className="h-3 w-3" /> Copied!</>
+                        ) : (
+                          <><Copy className="h-3 w-3" /> Copy Script</>
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={() => setSelectedArtifact(null)}
                       className="text-sm underline"
@@ -846,7 +879,13 @@ export default function AgentsPage() {
                     backgroundColor: "var(--background)",
                   }}
                 >
-                  <MarkdownContent content={selectedArtifact.content} />
+                  {selectedArtifact.content_format === "javascript" ? (
+                    <pre className="text-xs leading-relaxed" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      <code>{selectedArtifact.content}</code>
+                    </pre>
+                  ) : (
+                    <MarkdownContent content={selectedArtifact.content} />
+                  )}
                 </div>
               </div>
             )}

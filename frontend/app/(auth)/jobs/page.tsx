@@ -22,6 +22,12 @@ import {
   Globe,
   CheckCircle,
   AlertCircle,
+  MessageSquare,
+  FormInput,
+  Mail,
+  ArrowUpRight,
+  KeyRound,
+  HelpCircle,
 } from "lucide-react";
 
 const statusColors: Record<string, { bg: string; text: string }> = {
@@ -30,6 +36,33 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   analyzed: { bg: "rgba(16,185,129,0.1)", text: "rgb(5,150,105)" },
   applied: { bg: "rgba(139,92,246,0.1)", text: "rgb(124,58,237)" },
   archived: { bg: "rgba(107,114,128,0.1)", text: "rgb(107,114,128)" },
+};
+
+const methodIcons: Record<string, typeof MessageSquare> = {
+  chatbot: MessageSquare,
+  form: FormInput,
+  email: Mail,
+  redirect: ArrowUpRight,
+  api_portal: KeyRound,
+  unknown: HelpCircle,
+};
+
+const methodLabels: Record<string, string> = {
+  chatbot: "Chatbot",
+  form: "Web Form",
+  email: "Email",
+  redirect: "Redirect",
+  api_portal: "ATS Portal",
+  unknown: "Unknown",
+};
+
+const methodColors: Record<string, { bg: string; text: string }> = {
+  chatbot: { bg: "rgba(139,92,246,0.1)", text: "rgb(124,58,237)" },
+  form: { bg: "rgba(59,130,246,0.1)", text: "rgb(37,99,235)" },
+  email: { bg: "rgba(16,185,129,0.1)", text: "rgb(5,150,105)" },
+  redirect: { bg: "rgba(234,179,8,0.1)", text: "rgb(161,98,7)" },
+  api_portal: { bg: "rgba(239,68,68,0.1)", text: "rgb(220,38,38)" },
+  unknown: { bg: "rgba(107,114,128,0.1)", text: "rgb(107,114,128)" },
 };
 
 const statusOptions = [
@@ -244,6 +277,33 @@ export default function JobsPage() {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Source" />
         ),
+        filterFn: "arrIncludes",
+      },
+      {
+        accessorKey: "application_method",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Apply Method" />
+        ),
+        cell: ({ row }) => {
+          const method = row.getValue("application_method") as string | null;
+          if (!method) {
+            return <span style={{ color: "var(--muted-foreground)" }}>--</span>;
+          }
+          const Icon = methodIcons[method] || HelpCircle;
+          const colors = methodColors[method] || methodColors.unknown;
+          const label = methodLabels[method] || method;
+          const platform = row.original.application_platform;
+          return (
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+              style={{ backgroundColor: colors.bg, color: colors.text }}
+              title={platform ? `${label} (${platform})` : label}
+            >
+              <Icon className="h-3 w-3" />
+              {label}
+            </span>
+          );
+        },
         filterFn: "arrIncludes",
       },
       {
@@ -679,6 +739,38 @@ export default function JobsPage() {
               <X className="h-4 w-4" />
             </button>
           </div>
+          {expandedJob.application_method && (
+            <div className="mb-4">
+              <h3 className="text-sm font-medium mb-2">Application Method</h3>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const m = expandedJob.application_method;
+                  const Icon = methodIcons[m] || HelpCircle;
+                  const colors = methodColors[m] || methodColors.unknown;
+                  const label = methodLabels[m] || m;
+                  return (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
+                      style={{ backgroundColor: colors.bg, color: colors.text }}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {label}
+                    </span>
+                  );
+                })()}
+                {expandedJob.application_platform && (
+                  <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                    via {expandedJob.application_platform}
+                  </span>
+                )}
+              </div>
+              {expandedJob.application_method_details && (
+                <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                  {expandedJob.application_method_details}
+                </p>
+              )}
+            </div>
+          )}
           {expandedJob.description && (
             <div className="mb-4">
               <h3 className="text-sm font-medium mb-2">Description</h3>

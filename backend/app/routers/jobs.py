@@ -17,6 +17,7 @@ from app.schemas.job import (
     JobScrapeRequest,
     JobScrapeResult,
 )
+from app.services.application_detector import detect_application_method
 from app.services.job_scraper import scrape_job_url
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -128,6 +129,9 @@ async def import_job(
         salary_range=result.get("salary_range"),
         job_type=result.get("job_type"),
         source=result.get("source", "company_site"),
+        application_method=result.get("application_method"),
+        application_platform=result.get("application_platform"),
+        application_method_details=result.get("application_method_details"),
     )
     db.add(job)
     await db.flush()
@@ -206,6 +210,31 @@ async def delete_job(
 
     await db.delete(job)
     await db.commit()
+
+
+@router.post("/{job_id}/detect-method", response_model=JobListingOut)
+async def detect_job_method(
+    job_id: uuid.UUID,
+    current_user: UserInfo = Depends(require_permission("jobs", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Run AI-powered application method detection on a job listing."""
+    user_id = await _get_user_id(db, current_user)
+    result = await db.execute(
+        select(JobListing).where(JobListing.id == job_id, JobListing.user_id == user_id)
+    )
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job listing not found")
+
+    detection = await detect_application_method(job.url, use_ai=True)
+    job.application_method = detection.method
+    job.application_platform = detection.platform
+    job.application_method_details = detection.details
+
+    await db.commit()
+    await db.refresh(job)
+    return job
 
 
 @router.post("/{job_id}/analyze", response_model=JobListingOut)
