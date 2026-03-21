@@ -120,3 +120,15 @@ class ExperienceAIRequest(BaseModel):
 
 class ExperienceAIResponse(BaseModel):
     suggestion: str
+
+
+# --- Brand AI Assist (Headline / Summary) ---
+class BrandAIRequest(BaseModel):
+    field: str  # "headline" or "summary"
+    action: str  # "generate", "chat"
+    message: str | None = None
+    history: list[ConversationMessage] = []
+
+
+class BrandAIResponse(BaseModel):
+    suggestion: str

@@ -17,6 +17,7 @@ from app.schemas.profile import (
     ExperienceCreate, ExperienceOut,
     EducationCreate, EducationOut,
     ExperienceAIRequest, ExperienceAIResponse,
+    BrandAIRequest, BrandAIResponse,
 )
 from app.services.linkedin_parser import parse_linkedin_export
 from app.services.rag_service import index_profile
@@ -271,6 +272,40 @@ async def experience_ai_assist(
     )
 
     return ExperienceAIResponse(suggestion=suggestion)
+
+
+@router.post("/brand-assist", response_model=BrandAIResponse)
+async def brand_ai_assist(
+    data: BrandAIRequest,
+    current_user: UserInfo = Depends(require_permission("profile", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    """AI-powered headline or summary generation using the Brand Advisor agent."""
+    from app.services.agents.base import format_profile_context
+    from app.ai.agent_service import generate_brand_assist
+
+    if data.field not in ("headline", "summary"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="field must be headline or summary")
+    if data.action not in ("generate", "chat"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="action must be generate or chat")
+
+    user_id = await _get_user_id(db, current_user)
+    profile = await _get_or_create_profile(db, user_id)
+
+    profile_context = format_profile_context(profile)
+
+    conv_history = [(msg.role, msg.content) for msg in data.history[-10:]]
+
+    suggestion = await generate_brand_assist(
+        db=db,
+        field=data.field,
+        action=data.action,
+        profile_context=profile_context,
+        custom_message=data.message,
+        conversation_history=conv_history,
+    )
+
+    return BrandAIResponse(suggestion=suggestion)
 
 
 @router.post("/educations", response_model=EducationOut, status_code=status.HTTP_201_CREATED)

@@ -40,12 +40,6 @@ const navigationItems: SearchItem[] = [
     permission: { resource: "agents", action: "view" },
   },
   {
-    label: "Settings",
-    href: "/settings",
-    keywords: ["settings", "preferences", "config"],
-    permission: { resource: "settings", action: "view" },
-  },
-  {
     label: "User Management",
     href: "/admin/users",
     keywords: ["users", "admin", "people"],

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.13.0] - 2026-03-21
+
+### Added
+- Per-provider AI model assignments: each provider (Foundry, Anthropic, OpenAI, Ollama) stores its own heavy/standard/light model names
+- Switching AI_PROVIDER automatically switches which model names are used at runtime
+- Custom tabbed AI Provider UI in Admin Settings: provider selector dropdown, Anthropic (Foundry | API Key sub-tabs), OpenAI, Ollama tabs
+- Each provider tab shows connection settings + 3-column model assignment grid (Heavy/Standard/Light with color-coded tier badges)
+- Active provider indicator (green dot) on provider tabs
+- Alembic migration 011: adds 12 per-provider model settings, removes generic AI_MODEL_* settings, fixes endpoint URL
+
+### Changed
+- AI Provider config resolved dynamically via `Settings._model_for_tier()` property -- `settings.AI_MODEL_HEAVY/STANDARD/LIGHT` now resolve based on `AI_PROVIDER`
+- Azure AI Foundry endpoint updated to `https://snapistg-scus.azure.sleepnumber.com/anthropic`
+- Foundry model defaults updated to match deployment names: `cogdep-aifoundry-dev-eus2-claude-*`
+
+### Removed
+- User-facing `/settings` page and legacy `/api/settings` endpoint (replaced by `/admin/settings`)
+- Generic `AI_MODEL_HEAVY/STANDARD/LIGHT` settings (replaced by per-provider model settings)
+- "Settings" entry from main navigation sidebar (admin Settings link remains)
+
 ## [0.12.0] - 2026-03-20
 
 ### Added

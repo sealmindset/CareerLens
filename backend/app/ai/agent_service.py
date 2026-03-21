@@ -300,6 +300,112 @@ async def generate_experience_assist(
         return safe_error.message
 
 
+async def generate_brand_assist(
+    db: AsyncSession,
+    field: str,
+    action: str,
+    profile_context: str,
+    custom_message: str | None = None,
+    conversation_history: list[tuple[str, str]] | None = None,
+) -> str:
+    """Generate AI-powered headline or summary using the Brand Advisor agent."""
+    slug = AGENT_SLUGS["brand_advisor"]
+    fallback = DEFAULT_PROMPTS["brand_advisor"]
+
+    system_prompt = await get_prompt(db, slug, fallback)
+    temperature, max_tokens, model_tier = await get_prompt_config(db, slug)
+
+    tag_start = "===HEADLINE===" if field == "headline" else "===SUMMARY==="
+    tag_end = "===END_HEADLINE===" if field == "headline" else "===END_SUMMARY==="
+
+    tag_instructions = (
+        f"\n\nCRITICAL FORMATTING RULE: Whenever you produce a generated or revised {field}, "
+        f"you MUST wrap ONLY the {field} text in these exact tags:\n"
+        f"{tag_start}\n"
+        f"Your {field} text here\n"
+        f"{tag_end}\n\n"
+        f"Put your commentary, rationale, and follow-up questions OUTSIDE these tags. "
+        f"Never put commentary inside the tags."
+    )
+
+    if field == "headline":
+        generate_instructions = (
+            "The user wants you to craft a powerful professional headline (max 220 characters).\n\n"
+            "Use this formula: [Job Title] | [Key Skill/Tool] | [Unique Value Proposition or Result]\n\n"
+            "Requirements:\n"
+            "- Clear, concise, and keyword-rich for recruiter searchability\n"
+            "- Combine their job title, key skills, and the value they provide\n"
+            "- Reflect their T-shaped profile: vertical spike expertise + horizontal breadth\n"
+            "- Use industry-specific keywords naturally\n"
+            "- Max 220 characters\n\n"
+            "Base the headline on their actual experience, skills, and resume data. "
+            "Do NOT fabricate titles or skills they don't have.\n\n"
+            "Format your response as:\n"
+            f"1. The headline wrapped in {tag_start} / {tag_end} tags\n"
+            "2. Brief rationale for your choices (2-3 bullet points)\n"
+            "3. 1-2 alternative headline options for consideration\n"
+            + tag_instructions
+        )
+    else:
+        generate_instructions = (
+            "The user wants you to craft a high-impact professional summary.\n\n"
+            "Structure: Hook → Vertical Proof → Horizontal Proof → Bridge Statement → CTA\n\n"
+            "Requirements:\n"
+            "- Quantify brand equity, impact, and results with data-driven metrics\n"
+            "- Blend technical/specialized skills with strategic business understanding\n"
+            "- Highlight experience scope: product launches, cross-functional leadership, revenue growth\n"
+            "- Include quantifiable results: percentages, dollar figures, growth metrics\n"
+            "- Key skills to weave in: data analysis, digital platforms, product development, "
+            "brand strategy, market positioning, cross-functional leadership, consumer insights\n"
+            "- 3-5 sentences that give the reader a clear sense of who they are, what they bring, "
+            "and envisions them working there\n"
+            "- NOT a jack-of-all-trades — a recognized expert who ALSO understands adjacent domains\n\n"
+            "Base the summary on their actual experience, skills, and resume data. "
+            "Extrapolate reasonable metrics from their experience descriptions where possible, "
+            "but do NOT fabricate specific numbers they haven't mentioned.\n\n"
+            "Format your response as:\n"
+            f"1. The summary wrapped in {tag_start} / {tag_end} tags\n"
+            "2. Brief rationale for key choices (2-3 bullet points)\n"
+            "3. 1-2 follow-up questions to refine further\n"
+            + tag_instructions
+        )
+
+    prompt_parts = [profile_context]
+
+    if conversation_history:
+        history_lines = []
+        for role, content in conversation_history:
+            if role == "user":
+                history_lines.append(f"User: {content}")
+            else:
+                history_lines.append(f"Assistant: {content}")
+        prompt_parts.append("Previous conversation:\n" + "\n".join(history_lines))
+
+    if action == "generate":
+        prompt_parts.append(generate_instructions)
+    elif action == "chat" and custom_message:
+        prompt_parts.append(f"User message: {sanitize_prompt_input(custom_message)}")
+        prompt_parts.append(tag_instructions)
+
+    user_prompt = "\n\n".join(prompt_parts)
+
+    try:
+        provider = get_ai_provider()
+        model = get_model_for_tier(model_tier)
+        raw_response = await provider.complete(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return validate_agent_output(raw_response)
+    except Exception as e:
+        safe_error = sanitize_ai_error(e)
+        logger.error("AI provider error for brand_advisor (%s): %s", field, str(e))
+        return safe_error.message
+
+
 async def generate_agent_response(
     db: AsyncSession,
     agent_name: str,

@@ -14,7 +14,6 @@ import {
   FileText,
   Bot,
   UserCircle,
-  Settings,
   MessageSquareCode,
   SlidersHorizontal,
 } from "lucide-react";
@@ -57,12 +56,6 @@ const mainNavItems: NavItem[] = [
     href: "/agents",
     icon: Bot,
     permission: { resource: "agents", action: "view" },
-  },
-  {
-    label: "Settings",
-    href: "/settings",
-    icon: Settings,
-    permission: { resource: "settings", action: "view" },
   },
 ];
 

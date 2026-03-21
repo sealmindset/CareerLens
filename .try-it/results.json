@@ -37,12 +37,6 @@
   },
   {
     "role": "Super Admin",
-    "test": "Settings",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Super Admin",
     "test": "Admin Users",
     "status": "PASS",
     "note": ""
@@ -104,12 +98,6 @@
   {
     "role": "Admin",
     "test": "Agents",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Settings",
     "status": "PASS",
     "note": ""
   },
@@ -181,12 +169,6 @@
   },
   {
     "role": "Pro User",
-    "test": "Settings",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Pro User",
     "test": "Admin Users",
     "status": "N/A",
     "note": "No access (expected)"
@@ -248,12 +230,6 @@
   {
     "role": "User",
     "test": "Agents",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "User",
-    "test": "Settings",
     "status": "PASS",
     "note": ""
   },

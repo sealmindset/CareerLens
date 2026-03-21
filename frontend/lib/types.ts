@@ -100,6 +100,10 @@ export interface ExperienceAIResponse {
   suggestion: string;
 }
 
+export interface BrandAIResponse {
+  suggestion: string;
+}
+
 export interface JobScrapeResult {
   title: string | null;
   company: string | null;

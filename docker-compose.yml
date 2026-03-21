@@ -64,14 +64,23 @@ services:
       - FRONTEND_URL=http://localhost:3300
       - BACKEND_URL=http://localhost:8300
       - AI_PROVIDER=${AI_PROVIDER:-anthropic_foundry}
-      - AI_MODEL_HEAVY=${AI_MODEL_HEAVY:-cogdep-aifoundry-dev-eus2-claude-opus-4-6}
-      - AI_MODEL_STANDARD=${AI_MODEL_STANDARD:-cogdep-aifoundry-dev-eus2-claude-sonnet-4-5}
-      - AI_MODEL_LIGHT=${AI_MODEL_LIGHT:-cogdep-aifoundry-dev-eus2-claude-haiku-4-5}
       - AZURE_AI_FOUNDRY_ENDPOINT=${AZURE_AI_FOUNDRY_ENDPOINT:-}
       - AZURE_AI_FOUNDRY_API_KEY=${AZURE_AI_FOUNDRY_API_KEY:-}
+      - ANTHROPIC_FOUNDRY_MODEL_HEAVY=${ANTHROPIC_FOUNDRY_MODEL_HEAVY:-cogdep-aifoundry-dev-eus2-claude-opus-4-6}
+      - ANTHROPIC_FOUNDRY_MODEL_STANDARD=${ANTHROPIC_FOUNDRY_MODEL_STANDARD:-cogdep-aifoundry-dev-eus2-claude-sonnet-4-5}
+      - ANTHROPIC_FOUNDRY_MODEL_LIGHT=${ANTHROPIC_FOUNDRY_MODEL_LIGHT:-cogdep-aifoundry-dev-eus2-claude-haiku-4-5}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL_HEAVY=${ANTHROPIC_MODEL_HEAVY:-claude-opus-4-6}
+      - ANTHROPIC_MODEL_STANDARD=${ANTHROPIC_MODEL_STANDARD:-claude-sonnet-4-5}
+      - ANTHROPIC_MODEL_LIGHT=${ANTHROPIC_MODEL_LIGHT:-claude-haiku-4-5}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL_HEAVY=${OPENAI_MODEL_HEAVY:-gpt-4o}
+      - OPENAI_MODEL_STANDARD=${OPENAI_MODEL_STANDARD:-gpt-4o-mini}
+      - OPENAI_MODEL_LIGHT=${OPENAI_MODEL_LIGHT:-gpt-4o-mini}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+      - OLLAMA_MODEL_HEAVY=${OLLAMA_MODEL_HEAVY:-llama3.1:70b}
+      - OLLAMA_MODEL_STANDARD=${OLLAMA_MODEL_STANDARD:-llama3.1:8b}
+      - OLLAMA_MODEL_LIGHT=${OLLAMA_MODEL_LIGHT:-llama3.1:8b}
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-keyword}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
       - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-1536}
@@ -79,6 +88,10 @@ services:
       - RAG_CHUNK_OVERLAP=${RAG_CHUNK_OVERLAP:-50}
       - RAG_TOP_K=${RAG_TOP_K:-10}
       - MOCK_OLIVIA_URL=${MOCK_OLIVIA_URL:-http://mock-olivia:10091}
+    volumes:
+      - ${HOME}/.azure:/root/.azure:ro
+    extra_hosts:
+      - "snapistg-scus.azure.sleepnumber.com:10.193.189.4"
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s

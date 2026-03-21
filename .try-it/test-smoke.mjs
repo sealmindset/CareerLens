@@ -20,7 +20,6 @@ const pages = [
   { path: '/jobs', label: 'Jobs', minRole: 'User' },
   { path: '/applications', label: 'Applications', minRole: 'User' },
   { path: '/agents', label: 'Agents', minRole: 'User' },
-  { path: '/settings', label: 'Settings', minRole: 'User' },
   { path: '/admin/users', label: 'Admin Users', minRole: 'Admin' },
   { path: '/admin/roles', label: 'Admin Roles', minRole: 'Admin' },
   { path: '/admin/prompts', label: 'Admin Prompts', minRole: 'Admin' },

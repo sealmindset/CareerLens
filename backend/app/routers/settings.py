@@ -1,6 +1,9 @@
+import logging
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,10 +20,9 @@ from app.schemas.setting import (
 )
 from app.services.settings_service import invalidate_cache
 
-router = APIRouter(prefix="/api/admin/settings", tags=["settings"])
+logger = logging.getLogger(__name__)
 
-# Keep the old read-only endpoint for the user-facing Settings page
-legacy_router = APIRouter(prefix="/api/settings", tags=["settings"])
+router = APIRouter(prefix="/api/admin/settings", tags=["settings"])
 
 
 def _mask_value(setting: AppSetting) -> str | None:
@@ -252,44 +254,137 @@ async def bulk_update_settings(
 
 
 # ---------------------------------------------------------------------------
-# Legacy read-only endpoint (user-facing Settings page)
+# Test connection
 # ---------------------------------------------------------------------------
 
 
-@legacy_router.get("")
-async def get_settings_legacy(
-    current_user: UserInfo = Depends(require_permission("settings", "view")),
+class TestConnectionResult(BaseModel):
+    success: bool
+    provider: str
+    model: str
+    response: str | None = None
+    error: str | None = None
+    latency_ms: int | None = None
+
+
+def _get_fresh_az_token() -> str | None:
+    """Get a fresh Azure AD token by reading the MSAL token cache from mounted ~/.azure."""
+    import os
+
+    try:
+        import msal
+    except ImportError:
+        logger.warning("msal package not available")
+        return None
+
+    cache_path = os.path.join(
+        os.environ.get("AZURE_CONFIG_DIR", os.path.expanduser("~/.azure")),
+        "msal_token_cache.json",
+    )
+    if not os.path.exists(cache_path):
+        logger.warning("MSAL token cache not found at %s", cache_path)
+        return None
+
+    try:
+        cache = msal.SerializableTokenCache()
+        with open(cache_path) as f:
+            cache.deserialize(f.read())
+
+        # az CLI's well-known client ID
+        app = msal.PublicClientApplication(
+            "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
+            authority="https://login.microsoftonline.com/organizations",
+            token_cache=cache,
+        )
+
+        accounts = app.get_accounts()
+        if not accounts:
+            logger.warning("No accounts found in MSAL token cache")
+            return None
+
+        result = app.acquire_token_silent(
+            ["https://cognitiveservices.azure.com/.default"],
+            account=accounts[0],
+        )
+        if result and "access_token" in result:
+            return result["access_token"]
+
+        logger.warning("MSAL silent token acquisition failed: %s", result.get("error_description", "unknown"))
+    except Exception as e:
+        logger.warning("MSAL token cache read error: %s", e)
+    return None
+
+
+@router.post("/test-connection", response_model=TestConnectionResult)
+async def test_ai_connection(
+    current_user: UserInfo = Depends(require_permission("app_settings", "edit")),
 ):
-    """Get app settings including AI provider configuration (legacy endpoint)."""
-    provider_config = {
-        "provider": env_settings.AI_PROVIDER,
-        "base_url": env_settings.AZURE_AI_FOUNDRY_ENDPOINT or None,
-        "models": {
-            "heavy": env_settings.AI_MODEL_HEAVY,
-            "standard": env_settings.AI_MODEL_STANDARD,
-            "light": env_settings.AI_MODEL_LIGHT,
-        },
-    }
+    """Send a minimal prompt to the active AI provider to verify connectivity."""
+    from app.ai.provider import get_ai_provider, get_model_for_tier
 
-    tier_assignments = [
-        {
-            "tier": "heavy",
-            "model": env_settings.AI_MODEL_HEAVY,
-            "description": "Complex reasoning: Tailor, Coach, Strategist agents",
-        },
-        {
-            "tier": "standard",
-            "model": env_settings.AI_MODEL_STANDARD,
-            "description": "Analysis & research: Scout, Brand Advisor agents",
-        },
-        {
-            "tier": "light",
-            "model": env_settings.AI_MODEL_LIGHT,
-            "description": "Form filling & coordination: Coordinator agent",
-        },
-    ]
+    provider_name = env_settings.AI_PROVIDER
+    model = get_model_for_tier("light")
 
-    return {
-        "provider": provider_config,
-        "tier_assignments": tier_assignments,
-    }
+    start = time.monotonic()
+    try:
+        # For Azure AI Foundry, always grab a fresh az token (endpoint requires Bearer auth)
+        if provider_name == "anthropic_foundry":
+            token = _get_fresh_az_token()
+            if not token:
+                return TestConnectionResult(
+                    success=False,
+                    provider=provider_name,
+                    model=model,
+                    error="Could not get Azure token. Run 'az login' on your machine first.",
+                    latency_ms=int((time.monotonic() - start) * 1000),
+                )
+            import httpx
+
+            endpoint = env_settings.AZURE_AI_FOUNDRY_ENDPOINT.rstrip("/")
+            async with httpx.AsyncClient(timeout=60) as http:
+                resp = await http.post(
+                    f"{endpoint}/v1/messages",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                        "anthropic-version": "2023-06-01",
+                    },
+                    json={
+                        "model": model,
+                        "max_tokens": 10,
+                        "temperature": 0,
+                        "system": "You are a helpful assistant.",
+                        "messages": [{"role": "user", "content": "Respond with exactly: OK"}],
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                result_text = data["content"][0]["text"]
+        else:
+            ai = get_ai_provider()
+            result_text = await ai.complete(
+                system_prompt="You are a helpful assistant.",
+                user_prompt="Respond with exactly: OK",
+                model=model,
+                temperature=0,
+                max_tokens=10,
+            )
+
+        elapsed = int((time.monotonic() - start) * 1000)
+        return TestConnectionResult(
+            success=True,
+            provider=provider_name,
+            model=model,
+            response=result_text.strip()[:100],
+            latency_ms=elapsed,
+        )
+    except Exception as e:
+        elapsed = int((time.monotonic() - start) * 1000)
+        logger.warning("AI connection test failed for %s: %s", provider_name, e)
+        return TestConnectionResult(
+            success=False,
+            provider=provider_name,
+            model=model,
+            error=str(e)[:300],
+            latency_ms=elapsed,
+        )

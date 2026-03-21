@@ -11,6 +11,7 @@ import type {
   ProfileEducation,
   ResumeUploadResult,
   ExperienceAIResponse,
+  BrandAIResponse,
 } from "@/lib/types";
 import { MarkdownContent } from "@/components/markdown-content";
 import {
@@ -91,6 +92,14 @@ export default function ProfilePage() {
   const [aiEditing, setAiEditing] = useState(false);
   const [aiPreviousDesc, setAiPreviousDesc] = useState<string | null>(null);
   const [applyingAi, setApplyingAi] = useState(false);
+
+  // Brand AI Modal state (headline/summary)
+  const [brandField, setBrandField] = useState<"headline" | "summary" | null>(null);
+  const [brandLoading, setBrandLoading] = useState(false);
+  const [brandHistory, setBrandHistory] = useState<{ role: "user" | "ai"; content: string }[]>([]);
+  const [brandMessage, setBrandMessage] = useState("");
+  const [brandEnhanced, setBrandEnhanced] = useState("");
+  const [brandEditing, setBrandEditing] = useState(false);
 
   // Extract tagged description from AI response.
   // AI wraps descriptions in ===DESCRIPTION=== / ===END_DESCRIPTION=== tags.
@@ -467,6 +476,112 @@ export default function ProfilePage() {
     }
   };
 
+  // --- Brand AI helpers ---
+  const BRAND_TAGS: Record<string, { start: string; end: string }> = {
+    headline: { start: "===HEADLINE===", end: "===END_HEADLINE===" },
+    summary: { start: "===SUMMARY===", end: "===END_SUMMARY===" },
+  };
+
+  const extractBrandContent = (text: string, field: "headline" | "summary"): string | null => {
+    const { start, end } = BRAND_TAGS[field];
+    const s = text.indexOf(start);
+    const e = text.indexOf(end);
+    if (s === -1 || e === -1 || e <= s) return null;
+    return text.slice(s + start.length, e).trim();
+  };
+
+  const getBrandCommentary = (text: string, field: "headline" | "summary"): string => {
+    const { start, end } = BRAND_TAGS[field];
+    const s = text.indexOf(start);
+    const e = text.indexOf(end);
+    if (s === -1 || e === -1) return text;
+    const before = text.slice(0, s).trim();
+    const after = text.slice(e + end.length).trim();
+    return [before, after].filter(Boolean).join("\n\n");
+  };
+
+  const openBrandModal = (field: "headline" | "summary") => {
+    setBrandField(field);
+    setBrandEnhanced("");
+    setBrandEditing(false);
+    setBrandHistory([]);
+    setBrandMessage("");
+  };
+
+  const closeBrandModal = () => {
+    setBrandField(null);
+    setBrandEnhanced("");
+    setBrandEditing(false);
+    setBrandHistory([]);
+    setBrandMessage("");
+  };
+
+  const handleBrandGenerate = async (field: "headline" | "summary") => {
+    setBrandLoading(true);
+    try {
+      const resp = await apiPost<BrandAIResponse>("/profile/brand-assist", {
+        field,
+        action: "generate",
+        message: null,
+        history: brandHistory.map((m) => ({ role: m.role, content: m.content })),
+      });
+      const content = extractBrandContent(resp.suggestion, field);
+      if (content) {
+        setBrandEnhanced(content);
+        const commentary = getBrandCommentary(resp.suggestion, field);
+        if (commentary) {
+          setBrandHistory((prev) => [...prev, { role: "ai", content: commentary }]);
+        }
+      } else {
+        setBrandEnhanced(resp.suggestion.trim());
+      }
+    } catch (err) {
+      console.error("Brand AI failed:", err);
+      setBrandHistory([{ role: "ai", content: "Sorry, I couldn't generate content right now. Please try again." }]);
+    } finally {
+      setBrandLoading(false);
+    }
+  };
+
+  const handleBrandChat = async (field: "headline" | "summary", message: string) => {
+    const newHistory = [...brandHistory, { role: "user" as const, content: message }];
+    setBrandHistory(newHistory);
+    setBrandMessage("");
+    setBrandLoading(true);
+    try {
+      const resp = await apiPost<BrandAIResponse>("/profile/brand-assist", {
+        field,
+        action: "chat",
+        message,
+        history: newHistory.map((m) => ({ role: m.role, content: m.content })),
+      });
+      const content = extractBrandContent(resp.suggestion, field);
+      if (content) {
+        setBrandEnhanced(content);
+        setBrandEditing(false);
+        const commentary = getBrandCommentary(resp.suggestion, field);
+        setBrandHistory((prev) => [...prev, { role: "ai", content: commentary || `Updated the ${field}.` }]);
+      } else {
+        setBrandHistory((prev) => [...prev, { role: "ai", content: resp.suggestion }]);
+      }
+    } catch (err) {
+      console.error("Brand AI chat failed:", err);
+      setBrandHistory((prev) => [...prev, { role: "ai", content: "Sorry, I couldn't respond right now. Please try again." }]);
+    } finally {
+      setBrandLoading(false);
+    }
+  };
+
+  const applyBrandContent = async () => {
+    if (!brandField || !brandEnhanced.trim()) return;
+    if (brandField === "headline") {
+      setHeadline(brandEnhanced);
+    } else {
+      setSummary(brandEnhanced);
+    }
+    closeBrandModal();
+  };
+
   const addEducation = async () => {
     try {
       await apiPost("/profile/educations", {
@@ -538,7 +653,20 @@ export default function ProfilePage() {
           color: "var(--card-foreground)",
         }}
       >
-        <label className="block text-sm font-medium mb-2">Headline</label>
+        <div className="flex items-center gap-2 mb-2">
+          <label className="block text-sm font-medium">Headline</label>
+          {canEdit && (
+            <button
+              onClick={() => openBrandModal("headline")}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
+              style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+              title="AI Brand Advisor"
+            >
+              <Sparkles className="h-3 w-3" />
+              AI
+            </button>
+          )}
+        </div>
         <input
           type="text"
           value={headline}
@@ -562,7 +690,20 @@ export default function ProfilePage() {
           color: "var(--card-foreground)",
         }}
       >
-        <label className="block text-sm font-medium mb-2">Summary</label>
+        <div className="flex items-center gap-2 mb-2">
+          <label className="block text-sm font-medium">Summary</label>
+          {canEdit && (
+            <button
+              onClick={() => openBrandModal("summary")}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
+              style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+              title="AI Brand Advisor"
+            >
+              <Sparkles className="h-3 w-3" />
+              AI
+            </button>
+          )}
+        </div>
         <textarea
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
@@ -1625,6 +1766,250 @@ export default function ProfilePage() {
                         }
                       }}
                       disabled={aiLoading || !aiMessage.trim()}
+                      className="rounded-md px-3 py-2 transition-colors disabled:opacity-50"
+                      style={{
+                        backgroundColor: "var(--primary)",
+                        color: "var(--primary-foreground)",
+                      }}
+                    >
+                      <Send className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Brand AI Advisor Modal (Headline / Summary) */}
+      {brandField && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeBrandModal(); }}
+        >
+          <div
+            className="rounded-xl border shadow-2xl flex flex-col"
+            style={{
+              width: "95vw",
+              height: "85vh",
+              backgroundColor: "var(--card)",
+              borderColor: "var(--border)",
+              color: "var(--card-foreground)",
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              className="flex items-center justify-between px-6 py-4 border-b"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <div className="flex items-center gap-3">
+                <Sparkles className="h-5 w-5" style={{ color: "var(--primary)" }} />
+                <div>
+                  <h2 className="text-lg font-semibold">AI Brand Advisor</h2>
+                  <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                    {brandField === "headline" ? "Professional Headline" : "Professional Summary"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {brandEnhanced.trim() && (
+                  <button
+                    onClick={applyBrandContent}
+                    className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+                    style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    Apply Changes
+                  </button>
+                )}
+                <button
+                  onClick={closeBrandModal}
+                  className="rounded p-1.5 transition-colors hover:bg-accent"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body - 3 Panels */}
+            <div className="flex-1 grid grid-cols-3 gap-0 overflow-hidden">
+              {/* Panel 1: Current Value */}
+              <div
+                className="flex flex-col border-r overflow-hidden"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <div
+                  className="px-4 py-3 border-b font-medium text-sm flex items-center gap-2"
+                  style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)" }}
+                >
+                  <FileText className="h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
+                  Current {brandField === "headline" ? "Headline" : "Summary"}
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {(brandField === "headline" ? headline : summary) ? (
+                    <div className="text-sm">
+                      <MarkdownContent content={brandField === "headline" ? headline : summary} />
+                    </div>
+                  ) : (
+                    <p className="text-sm italic" style={{ color: "var(--muted-foreground)" }}>
+                      No {brandField} yet. Click &quot;Generate&quot; to create one using your profile data.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Panel 2: AI-Generated (editable) */}
+              <div
+                className="flex flex-col border-r overflow-hidden"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <div
+                  className="px-4 py-3 border-b font-medium text-sm flex items-center justify-between"
+                  style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)" }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" style={{ color: "var(--primary)" }} />
+                    AI-Generated {brandField === "headline" ? "Headline" : "Summary"}
+                  </div>
+                  <div className="flex gap-1">
+                    {brandEnhanced && (
+                      <button
+                        onClick={() => setBrandEditing(!brandEditing)}
+                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-background"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <Pencil className="h-3 w-3" />
+                        {brandEditing ? "Preview" : "Edit"}
+                      </button>
+                    )}
+                    {!brandEnhanced && !brandLoading && (
+                      <button
+                        onClick={() => handleBrandGenerate(brandField)}
+                        className="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors"
+                        style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        Generate
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {brandLoading && !brandEnhanced ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-3">
+                      <Loader2 className="h-6 w-6 animate-spin" style={{ color: "var(--primary)" }} />
+                      <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                        Crafting your {brandField}...
+                      </p>
+                    </div>
+                  ) : brandEnhanced && brandEditing ? (
+                    <textarea
+                      value={brandEnhanced}
+                      onChange={(e) => setBrandEnhanced(e.target.value)}
+                      className="w-full h-full text-sm outline-none resize-none font-mono"
+                      style={{
+                        backgroundColor: "transparent",
+                        color: "var(--foreground)",
+                      }}
+                    />
+                  ) : brandEnhanced ? (
+                    <div className="text-sm">
+                      <MarkdownContent content={brandEnhanced} />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                      <Sparkles className="h-8 w-8" style={{ color: "var(--muted-foreground)", opacity: 0.4 }} />
+                      <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                        Click &quot;Generate&quot; to create an AI-powered {brandField} based on your profile, or use the chat to guide the AI.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Panel 3: Chat with Brand Advisor */}
+              <div className="flex flex-col overflow-hidden">
+                <div
+                  className="px-4 py-3 border-b font-medium text-sm flex items-center gap-2"
+                  style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)" }}
+                >
+                  <MessageSquare className="h-4 w-4" style={{ color: "var(--primary)" }} />
+                  Chat with Brand Advisor
+                </div>
+
+                {/* Chat Messages */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {brandHistory.length === 0 && !brandLoading && (
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                      <MessageSquare className="h-8 w-8" style={{ color: "var(--muted-foreground)", opacity: 0.4 }} />
+                      <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                        {brandField === "headline"
+                          ? "Ask the AI to refine your headline, emphasize certain skills, or target a specific industry."
+                          : "Ask the AI to adjust tone, highlight specific achievements, or target a particular audience."}
+                      </p>
+                    </div>
+                  )}
+                  {brandHistory.map((msg, idx) => (
+                    <div key={idx}>
+                      {msg.role === "user" ? (
+                        <div className="flex justify-end">
+                          <div
+                            className="rounded-lg px-3 py-2 text-sm max-w-[85%]"
+                            style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                          >
+                            {msg.content}
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          className="rounded-lg border p-3 text-sm"
+                          style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                        >
+                          <MarkdownContent content={msg.content} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {brandLoading && (
+                    <div className="flex items-center gap-2 text-sm" style={{ color: "var(--muted-foreground)" }}>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Thinking...
+                    </div>
+                  )}
+                </div>
+
+                {/* Chat Input */}
+                <div
+                  className="border-t p-3"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={brandMessage}
+                      onChange={(e) => setBrandMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && brandMessage.trim() && !brandLoading && brandField) {
+                          handleBrandChat(brandField, brandMessage);
+                        }
+                      }}
+                      placeholder={`Refine your ${brandField}...`}
+                      disabled={brandLoading}
+                      className="flex-1 rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                      style={{
+                        backgroundColor: "var(--background)",
+                        borderColor: "var(--border)",
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        if (brandMessage.trim() && !brandLoading && brandField) {
+                          handleBrandChat(brandField, brandMessage);
+                        }
+                      }}
+                      disabled={brandLoading || !brandMessage.trim()}
                       className="rounded-md px-3 py-2 transition-colors disabled:opacity-50"
                       style={{
                         backgroundColor: "var(--primary)",
