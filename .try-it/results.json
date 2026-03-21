@@ -1,0 +1,290 @@
+[
+  {
+    "role": "Super Admin",
+    "test": "Login",
+    "status": "PASS",
+    "note": "role: Super Admin"
+  },
+  {
+    "role": "Super Admin",
+    "test": "Dashboard",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Super Admin",
+    "test": "Profile",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Super Admin",
+    "test": "Jobs",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Super Admin",
+    "test": "Applications",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Super Admin",
+    "test": "Agents",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Super Admin",
+    "test": "Settings",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Super Admin",
+    "test": "Admin Users",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Super Admin",
+    "test": "Admin Roles",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Super Admin",
+    "test": "Admin Prompts",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Super Admin",
+    "test": "Admin Settings",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Super Admin",
+    "test": "Logout",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Login",
+    "status": "PASS",
+    "note": "role: Admin"
+  },
+  {
+    "role": "Admin",
+    "test": "Dashboard",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Profile",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Jobs",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Applications",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Agents",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Settings",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Admin Users",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Admin Roles",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Admin Prompts",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Admin Settings",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Admin",
+    "test": "Logout",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Pro User",
+    "test": "Login",
+    "status": "PASS",
+    "note": "role: Pro User"
+  },
+  {
+    "role": "Pro User",
+    "test": "Dashboard",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Pro User",
+    "test": "Profile",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Pro User",
+    "test": "Jobs",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Pro User",
+    "test": "Applications",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Pro User",
+    "test": "Agents",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Pro User",
+    "test": "Settings",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "Pro User",
+    "test": "Admin Users",
+    "status": "N/A",
+    "note": "No access (expected)"
+  },
+  {
+    "role": "Pro User",
+    "test": "Admin Roles",
+    "status": "N/A",
+    "note": "No access (expected)"
+  },
+  {
+    "role": "Pro User",
+    "test": "Admin Prompts",
+    "status": "N/A",
+    "note": "No access (expected)"
+  },
+  {
+    "role": "Pro User",
+    "test": "Admin Settings",
+    "status": "N/A",
+    "note": "No access (expected)"
+  },
+  {
+    "role": "Pro User",
+    "test": "Logout",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "User",
+    "test": "Login",
+    "status": "PASS",
+    "note": "role: User"
+  },
+  {
+    "role": "User",
+    "test": "Dashboard",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "User",
+    "test": "Profile",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "User",
+    "test": "Jobs",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "User",
+    "test": "Applications",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "User",
+    "test": "Agents",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "User",
+    "test": "Settings",
+    "status": "PASS",
+    "note": ""
+  },
+  {
+    "role": "User",
+    "test": "Admin Users",
+    "status": "N/A",
+    "note": "No access (expected)"
+  },
+  {
+    "role": "User",
+    "test": "Admin Roles",
+    "status": "N/A",
+    "note": "No access (expected)"
+  },
+  {
+    "role": "User",
+    "test": "Admin Prompts",
+    "status": "N/A",
+    "note": "No access (expected)"
+  },
+  {
+    "role": "User",
+    "test": "Admin Settings",
+    "status": "N/A",
+    "note": "No access (expected)"
+  },
+  {
+    "role": "User",
+    "test": "Logout",
+    "status": "PASS",
+    "note": ""
+  }
+]

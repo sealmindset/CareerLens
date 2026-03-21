@@ -1,6 +1,6 @@
 # CareerLens -- Try-It Report
-> Tested: 2026-03-19
-> Status: All Passing
+> Tested: 2026-03-20
+> Status: All Passing (40/40)
 
 ## Summary
 
@@ -10,75 +10,62 @@ Your app was tested automatically. Here's what happened:
 |----------------|--------|
 | App starts up | PASS |
 | Login works | PASS (all 4 roles) |
-| All pages load | 6 of 6 passing |
+| All pages load | 10 of 10 passing |
 | Permissions work correctly | PASS |
 | API is responding | PASS |
-| Seed data populated | PASS |
-| Logout works | PASS |
-| Resume upload UI | PASS |
+| Logout works | PASS (all 4 roles) |
 
 ## Login Testing
 
 Each type of user was tested:
 
-| User Type | Login | Dashboard | Endpoints | Admin Access | Result |
-|-----------|-------|-----------|-----------|-------------|--------|
-| Super Admin (mock-admin) | PASS | PASS | All 200 | Full access (27 perms) | PASS |
-| Admin (mock-manager) | PASS | PASS | All 200 | Users yes, Roles no (23 perms) | PASS |
-| Pro User (mock-pro) | PASS | PASS | All 200 | No admin (16 perms) | PASS |
-| User (mock-user) | PASS | PASS | All 200 | No admin (5 perms) | PASS |
+| User Type | Login | Dashboard | Pages Tested | Result |
+|-----------|-------|-----------|-------------|--------|
+| Super Admin | PASS | PASS | 10 of 10 | PASS |
+| Admin | PASS | PASS | 10 of 10 | PASS |
+| Pro User | PASS | PASS | 6 of 6 | PASS |
+| User | PASS | PASS | 6 of 6 | PASS |
 
 ## Pages Tested
 
 | Page | Super Admin | Admin | Pro User | User | Notes |
 |------|-------------|-------|----------|------|-------|
-| Dashboard | PASS | PASS | PASS | PASS | Shows jobs, apps, skills stats |
-| Profile | PASS | PASS | PASS | PASS | Resume upload visible, profile data populated |
-| Jobs | PASS | PASS | PASS | PASS | Job listings with Import from URL |
-| Applications | PASS | PASS | PASS | PASS | Pipeline tracker |
-| Agents | PASS | PASS | PASS | PASS | 6 AI agents with tiers |
-| Settings | PASS | PASS | PASS | N/A | AI provider configuration |
-| Admin Users | PASS | PASS | 403 | 403 | Correctly restricted |
-| Admin Roles | PASS | 403 | 403 | 403 | Correctly restricted |
+| Dashboard | PASS | PASS | PASS | PASS | |
+| Profile | PASS | PASS | PASS | PASS | |
+| Jobs | PASS | PASS | PASS | PASS | |
+| Applications | PASS | PASS | PASS | PASS | |
+| Agents | PASS | PASS | PASS | PASS | |
+| Settings | PASS | PASS | PASS | PASS | |
+| Admin Users | PASS | PASS | N/A | N/A | Admin only |
+| Admin Roles | PASS | PASS | N/A | N/A | Admin only |
+| Admin Prompts | PASS | PASS | N/A | N/A | Admin only |
+| Admin Settings | PASS | PASS | N/A | N/A | Admin only (NEW in v0.12.0) |
 
-## New Feature: Resume Upload (v0.4.0)
+## New in This Release (v0.12.0)
 
-The Profile page now includes drag-and-drop resume upload:
-- **Upload Resume** button in the Resume Text section
-- Supports PDF, Word (.docx), and plain text files
-- 10 MB file size limit
-- AI-powered parsing extracts headline, summary, skills, experience, and education
-- Extracted data auto-populates profile fields (skip duplicate skills)
-- Raw resume text stored for AI agents to reference later
+- **Admin Settings page** (`/admin/settings`) -- all 23 .env variables configurable via UI
+- 7 setting groups: Database (1), Authentication (3), Security (2), URLs (2), AI Provider (9), RAG/Embeddings (6), Mock Services (1)
+- Sensitive values masked with eye-toggle reveal
+- "Restart required" badges on settings that need a server restart
+- Bulk save per group
+- Full audit log with old/new value diffs
+- RBAC: `app_settings.view` and `app_settings.edit` permissions
 
 ## Screenshots
 
 Screenshots saved in `.try-it/screenshots/`:
-- `01_login.png` - Login page with "Sign in with SSO"
-- `02_mock_oidc.png` - Mock OIDC user picker
-- `03_after_login.png` - Post-login redirect
-- `04_dashboard.png` - Dashboard with stats and quick actions
-- `05_profile.png` - Profile page with Upload Resume button
-- `06_jobs.png` - Job Listings with scraped Valvoline job
-- `07_applications.png` - Applications pipeline
-- `08_agents.png` - AI Agents console (6 agents)
+- `mock-admin_dashboard.png` -- Super Admin dashboard
+- `mock-admin_admin_settings.png` -- Admin Settings page (NEW)
+- `mock-manager_admin_settings.png` -- Admin Settings as Admin role
+- Plus screenshots for all pages per role
 
 ## How to Access Your App
 
 - **Open your browser to:** http://localhost:3300
-- **To log in:** Click "Sign in with SSO" and pick a user from the login screen:
-  - **Admin User** (admin@career-lens.local) -- Full access including user/role management
-  - **Manager User** (manager@career-lens.local) -- All features plus user management
-  - **Pro User** (pro@career-lens.local) -- Full job search features, no admin
-  - **Regular User** (user@career-lens.local) -- View-only access
-
-## To Test Resume Upload
-
-1. Log in and go to **My Profile**
-2. Scroll down to the **Resume Text** section
-3. Click **Upload Resume** or drag-and-drop a PDF/Word/text file
-4. AI will parse the document and auto-fill skills, experience, and education
-5. A summary will show how many skills, experiences, and educations were added
+- **To log in as Super Admin:** Click "Sign In", pick "Admin User" (admin@career-lens.local)
+- **To log in as Admin:** Click "Sign In", pick "Manager User" (manager@career-lens.local)
+- **To log in as Pro User:** Click "Sign In", pick "Pro User" (pro@career-lens.local)
+- **To log in as User:** Click "Sign In", pick "Regular User" (user@career-lens.local)
 
 ## Services Running
 
@@ -88,12 +75,12 @@ Screenshots saved in `.try-it/screenshots/`:
 | Backend API | http://localhost:8300 | Healthy |
 | Database | localhost:5600 | Healthy |
 | Mock OIDC | http://localhost:10190 | Healthy |
+| Mock Olivia | http://localhost:10191 | Healthy |
 
 ## Issues Found
-None -- all tests passed.
+None -- all tests passing.
 
 ## What to Do Next
 - Explore your app in the browser (see instructions above)
 - If something doesn't look right, tell me and I'll fix it
-- When you're happy with how it works, type **/ship-it** to deploy
 - To make changes, type **/resume-it**
