@@ -284,3 +284,83 @@ export interface AgentTaskResult {
   next_suggested_agent: string | null;
   preflight_warnings: PreflightItem[];
 }
+
+// Application Form types (Auto-Fill modal)
+export interface ApplicationFormField {
+  key: string;
+  label: string;
+  value: string;
+  field_type: string;
+  options?: string[] | null;
+  required: boolean;
+  section: string;
+}
+
+export interface ApplicationFormData {
+  fields: ApplicationFormField[];
+  job_title: string;
+  job_company: string;
+}
+
+export interface CompletenessCheckResult {
+  complete: boolean;
+  total_fields: number;
+  filled_fields: number;
+  issues: { field_key: string; field_label: string; issue: string }[];
+}
+
+export interface BestFitReviewResult {
+  score: number;
+  verdict: string;
+  summary: string;
+  strengths: string[];
+  improvements: {
+    field_key: string;
+    field_label: string;
+    current_value: string;
+    suggestion: string;
+  }[];
+}
+
+// Chatbot simulation types (Auto-Fill modal, chatbot mode)
+export interface DetectedMethodResult {
+  method: string;
+  platform: string;
+  job_title: string;
+  job_company: string;
+  job_url: string;
+}
+
+export interface ChatbotQuestionItem {
+  index: number;
+  question: string;
+  suggested_answer: string;
+  field_name: string;
+  confidence: string;
+  approved_answer: string | null;
+  status: string;
+}
+
+export interface ChatbotSimulationResult {
+  method: string;
+  platform: string;
+  job_title: string;
+  job_company: string;
+  job_url: string;
+  questions: ChatbotQuestionItem[];
+  total_questions: number;
+}
+
+export interface ChatbotSubmitResult {
+  success: boolean;
+  messages_exchanged: number;
+  data_submitted: Record<string, string>;
+  verification: {
+    simulated: string | null;
+    live: string | null;
+    match: string;
+    score: number;
+  }[];
+  error: string | null;
+  completed: boolean;
+}

@@ -19,7 +19,15 @@ from app.schemas.auth import UserInfo
 from app.schemas.workspace import (
     AgentTaskRequest,
     AgentTaskResult,
+    ApplicationFormData,
+    ApplicationFormSubmit,
     ArtifactOut,
+    BestFitReviewResult,
+    ChatbotSimulationResult,
+    ChatbotSubmitRequest,
+    ChatbotSubmitResult,
+    CompletenessCheckResult,
+    DetectedMethodResult,
     PipelineRunOut,
     PipelineStartRequest,
     PreflightResult,
@@ -447,6 +455,136 @@ async def run_agent_task(
         next_suggested_agent=next_agent,
         preflight_warnings=preflight_warnings,
     )
+
+
+# ─── Auto-Fill modal endpoints ───────────────────────────────────────
+
+@router.post("/workspaces/{workspace_id}/detect-method", response_model=DetectedMethodResult)
+async def detect_application_method_endpoint(
+    workspace_id: uuid.UUID,
+    current_user: UserInfo = Depends(require_permission("workspace", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Detect the application method (chatbot, form, portal, etc.) for this job."""
+    user_id = await _get_user_id(db, current_user)
+    ws_result = await db.execute(
+        select(AgentWorkspace).where(AgentWorkspace.id == workspace_id, AgentWorkspace.user_id == user_id)
+    )
+    workspace = ws_result.scalar_one_or_none()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    from app.services.agents.application_form import detect_method
+    return await detect_method(db, user_id, workspace)
+
+
+@router.post("/workspaces/{workspace_id}/simulate-chatbot", response_model=ChatbotSimulationResult)
+async def simulate_chatbot_endpoint(
+    workspace_id: uuid.UUID,
+    current_user: UserInfo = Depends(require_permission("workspace", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Simulate the chatbot to collect questions and generate AI-suggested answers."""
+    user_id = await _get_user_id(db, current_user)
+    ws_result = await db.execute(
+        select(AgentWorkspace).where(AgentWorkspace.id == workspace_id, AgentWorkspace.user_id == user_id)
+    )
+    workspace = ws_result.scalar_one_or_none()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    from app.services.agents.application_form import simulate_chatbot
+    return await simulate_chatbot(db, user_id, workspace)
+
+
+@router.post("/workspaces/{workspace_id}/submit-chatbot", response_model=ChatbotSubmitResult)
+async def submit_chatbot_endpoint(
+    workspace_id: uuid.UUID,
+    data: ChatbotSubmitRequest,
+    current_user: UserInfo = Depends(require_permission("workspace", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Drive the real chatbot with user-approved answers and verify against simulation."""
+    user_id = await _get_user_id(db, current_user)
+    ws_result = await db.execute(
+        select(AgentWorkspace).where(AgentWorkspace.id == workspace_id, AgentWorkspace.user_id == user_id)
+    )
+    workspace = ws_result.scalar_one_or_none()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    from app.services.agents.application_form import submit_to_chatbot
+    return await submit_to_chatbot(db, user_id, workspace, data.answers)
+
+
+@router.post("/workspaces/{workspace_id}/generate-application-form", response_model=ApplicationFormData)
+async def generate_application_form(
+    workspace_id: uuid.UUID,
+    current_user: UserInfo = Depends(require_permission("workspace", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate AI-populated application form fields from profile + job data."""
+    user_id = await _get_user_id(db, current_user)
+
+    ws_result = await db.execute(
+        select(AgentWorkspace).where(
+            AgentWorkspace.id == workspace_id,
+            AgentWorkspace.user_id == user_id,
+        )
+    )
+    workspace = ws_result.scalar_one_or_none()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    from app.services.agents.application_form import generate_form_data
+    return await generate_form_data(db, user_id, workspace)
+
+
+@router.post("/workspaces/{workspace_id}/check-completeness", response_model=CompletenessCheckResult)
+async def check_form_completeness(
+    workspace_id: uuid.UUID,
+    data: ApplicationFormSubmit,
+    current_user: UserInfo = Depends(require_permission("workspace", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check if all required form fields are filled out."""
+    user_id = await _get_user_id(db, current_user)
+
+    ws_result = await db.execute(
+        select(AgentWorkspace).where(
+            AgentWorkspace.id == workspace_id,
+            AgentWorkspace.user_id == user_id,
+        )
+    )
+    if not ws_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    from app.services.agents.application_form import check_completeness
+    return check_completeness(data.fields)
+
+
+@router.post("/workspaces/{workspace_id}/best-fit-review", response_model=BestFitReviewResult)
+async def best_fit_review(
+    workspace_id: uuid.UUID,
+    data: ApplicationFormSubmit,
+    current_user: UserInfo = Depends(require_permission("workspace", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """AI-powered review of the application form against job requirements."""
+    user_id = await _get_user_id(db, current_user)
+
+    ws_result = await db.execute(
+        select(AgentWorkspace).where(
+            AgentWorkspace.id == workspace_id,
+            AgentWorkspace.user_id == user_id,
+        )
+    )
+    workspace = ws_result.scalar_one_or_none()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    from app.services.agents.application_form import review_best_fit
+    return await review_best_fit(db, user_id, workspace, data.fields)
 
 
 # ─── Pipeline endpoints (automatic chaining) ─────────────────────────

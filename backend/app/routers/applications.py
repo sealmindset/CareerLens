@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -155,6 +156,8 @@ async def update_application_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
     application.status = data.status
+    if data.status == "submitted" and not application.submitted_at:
+        application.submitted_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(application)
     return application

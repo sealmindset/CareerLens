@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -14,7 +15,6 @@ import {
   Loader2,
   Search,
   Zap,
-  FileText,
   ExternalLink,
   ChevronDown,
   ChevronUp,
@@ -28,6 +28,7 @@ import {
   ArrowUpRight,
   KeyRound,
   HelpCircle,
+  Rocket,
 } from "lucide-react";
 
 const statusColors: Record<string, { bg: string; text: string }> = {
@@ -74,6 +75,7 @@ const statusOptions = [
 ];
 
 export default function JobsPage() {
+  const router = useRouter();
   const { hasPermission } = useAuth();
   const [jobs, setJobs] = useState<JobListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -228,16 +230,8 @@ export default function JobsPage() {
     }
   };
 
-  const applyToJob = async (job: JobListing) => {
-    try {
-      await apiPost("/applications", {
-        job_listing_id: job.id,
-        status: "draft",
-      });
-      await fetchJobs();
-    } catch (err) {
-      console.error("Failed to create application:", err);
-    }
+  const openInStudio = (job: JobListing) => {
+    router.push(`/agents?job=${job.id}`);
   };
 
   const columns = useMemo<ColumnDef<JobListing, unknown>[]>(
@@ -384,12 +378,13 @@ export default function JobsPage() {
               </button>
               {job.status === "analyzed" && (
                 <button
-                  onClick={() => applyToJob(job)}
-                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-accent"
-                  title="Create application"
+                  onClick={() => openInStudio(job)}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors"
+                  style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                  title="Open in Application Studio"
                 >
-                  <FileText className="h-3 w-3" />
-                  Apply
+                  <Rocket className="h-3 w-3" />
+                  Studio
                 </button>
               )}
               {job.url && (

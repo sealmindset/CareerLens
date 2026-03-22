@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { apiGet, apiPost, apiDownload } from "@/lib/api";
+import { useSearchParams } from "next/navigation";
+import { apiGet, apiPost, apiPut, apiDownload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatRelative } from "@/lib/utils";
 import { MarkdownContent } from "@/components/markdown-content";
@@ -10,6 +11,14 @@ import type {
   AgentMessage,
   AgentWorkspace,
   Application,
+  ApplicationFormField,
+  ApplicationFormData,
+  CompletenessCheckResult,
+  BestFitReviewResult,
+  DetectedMethodResult,
+  ChatbotQuestionItem,
+  ChatbotSimulationResult,
+  ChatbotSubmitResult,
   JobListing,
   PreflightResult,
   AgentTaskResult,
@@ -42,6 +51,12 @@ import {
   ChevronDown,
   Download,
   History,
+  X,
+  ClipboardCheck as ClipboardCheckIcon,
+  Sparkles,
+  ShieldCheck,
+  SendHorizonal,
+  TriangleAlert,
 } from "lucide-react";
 
 interface AgentDef {
@@ -138,8 +153,12 @@ const statusIcon = (status: string) => {
 type ViewMode = "chat" | "workspace";
 
 export default function AgentsPage() {
+  const searchParams = useSearchParams();
   const { hasPermission } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>("workspace");
+  const [autoLoadJobId, setAutoLoadJobId] = useState<string | null>(
+    searchParams.get("job")
+  );
 
   // Chat state
   const [activeAgent, setActiveAgent] = useState<AgentDef | null>(null);
@@ -167,6 +186,26 @@ export default function AgentsPage() {
   const [copiedScript, setCopiedScript] = useState(false);
   const [expandedHistoryKeys, setExpandedHistoryKeys] = useState<Set<string>>(new Set());
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
+
+  // Auto-Fill modal state
+  const [showAutoFillModal, setShowAutoFillModal] = useState(false);
+  const [autoFillLoading, setAutoFillLoading] = useState(false);
+  const [autoFillJobTitle, setAutoFillJobTitle] = useState("");
+  const [autoFillJobCompany, setAutoFillJobCompany] = useState("");
+  const [detectedMethod, setDetectedMethod] = useState<string>("unknown");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  // Form mode state
+  const [autoFillFields, setAutoFillFields] = useState<ApplicationFormField[]>([]);
+  const [completenessResult, setCompletenessResult] = useState<CompletenessCheckResult | null>(null);
+  const [bestFitResult, setBestFitResult] = useState<BestFitReviewResult | null>(null);
+  const [completenessLoading, setCompletenessLoading] = useState(false);
+  const [bestFitLoading, setBestFitLoading] = useState(false);
+  // Chatbot mode state
+  const [chatbotQuestions, setChatbotQuestions] = useState<ChatbotQuestionItem[]>([]);
+  const [activeQuestionIdx, setActiveQuestionIdx] = useState(0);
+  const [editingAnswer, setEditingAnswer] = useState("");
+  const [chatbotSubmitResult, setChatbotSubmitResult] = useState<ChatbotSubmitResult | null>(null);
 
   const toggleHistory = (key: string) => {
     setExpandedHistoryKeys((prev) => {
@@ -219,6 +258,18 @@ export default function AgentsPage() {
         });
     }
   }, [viewMode, jobListings.length]);
+
+  // Auto-load workspace when navigated from Job Listings with ?job=id
+  useEffect(() => {
+    if (autoLoadJobId && jobListings.length > 0 && !workspace) {
+      const job = jobListings.find((j) => j.id === autoLoadJobId);
+      if (job) {
+        setAutoLoadJobId(null);
+        loadWorkspace(job);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoadJobId, jobListings, workspace]);
 
   // --- Chat functions ---
 
@@ -413,6 +464,190 @@ export default function AgentsPage() {
       console.error("Pipeline failed:", err);
     } finally {
       setPipelineRunning(false);
+    }
+  };
+
+  // --- Auto-Fill modal functions ---
+
+  const openAutoFillModal = async () => {
+    if (!workspace) return;
+    setShowAutoFillModal(true);
+    setAutoFillLoading(true);
+    setAutoFillFields([]);
+    setChatbotQuestions([]);
+    setActiveQuestionIdx(0);
+    setCompletenessResult(null);
+    setBestFitResult(null);
+    setChatbotSubmitResult(null);
+    setSubmitSuccess(false);
+    setDetectedMethod("unknown");
+
+    try {
+      // Step 1: Detect application method
+      const detection = await apiPost<DetectedMethodResult>(
+        `/agents/workspaces/${workspace.id}/detect-method`,
+      );
+      setAutoFillJobTitle(detection.job_title);
+      setAutoFillJobCompany(detection.job_company);
+      setDetectedMethod(detection.method);
+
+      if (detection.method === "chatbot") {
+        // Step 2a: Simulate chatbot — collect questions + AI suggestions
+        const sim = await apiPost<ChatbotSimulationResult>(
+          `/agents/workspaces/${workspace.id}/simulate-chatbot`,
+        );
+        const withDefaults = sim.questions.map((q) => ({
+          ...q,
+          approved_answer: q.suggested_answer,
+          status: "pending" as string,
+        }));
+        setChatbotQuestions(withDefaults);
+        if (withDefaults.length > 0) {
+          setEditingAnswer(withDefaults[0].suggested_answer);
+        }
+      } else {
+        // Step 2b: Generate traditional form
+        const data = await apiPost<ApplicationFormData>(
+          `/agents/workspaces/${workspace.id}/generate-application-form`,
+        );
+        setAutoFillFields(data.fields);
+      }
+    } catch (err) {
+      console.error("Failed to load auto-fill modal:", err);
+    } finally {
+      setAutoFillLoading(false);
+    }
+  };
+
+  // --- Chatbot mode functions ---
+
+  const acceptAnswer = () => {
+    setChatbotQuestions((prev) =>
+      prev.map((q, i) =>
+        i === activeQuestionIdx
+          ? { ...q, approved_answer: editingAnswer, status: "accepted" }
+          : q,
+      ),
+    );
+    advanceQuestion();
+  };
+
+  const editAnswer = () => {
+    setChatbotQuestions((prev) =>
+      prev.map((q, i) =>
+        i === activeQuestionIdx
+          ? { ...q, approved_answer: editingAnswer, status: "edited" }
+          : q,
+      ),
+    );
+    advanceQuestion();
+  };
+
+  const skipAnswer = () => {
+    setChatbotQuestions((prev) =>
+      prev.map((q, i) =>
+        i === activeQuestionIdx
+          ? { ...q, approved_answer: "", status: "skipped" }
+          : q,
+      ),
+    );
+    advanceQuestion();
+  };
+
+  const advanceQuestion = () => {
+    const next = activeQuestionIdx + 1;
+    if (next < chatbotQuestions.length) {
+      setActiveQuestionIdx(next);
+      setEditingAnswer(chatbotQuestions[next].suggested_answer);
+    }
+  };
+
+  const goToQuestion = (idx: number) => {
+    setActiveQuestionIdx(idx);
+    setEditingAnswer(chatbotQuestions[idx].approved_answer || chatbotQuestions[idx].suggested_answer);
+  };
+
+  const allQuestionsReviewed = chatbotQuestions.length > 0 && chatbotQuestions.every((q) => q.status !== "pending");
+
+  const submitChatbot = async () => {
+    if (!workspace) return;
+    setSubmitting(true);
+    try {
+      const result = await apiPost<ChatbotSubmitResult>(
+        `/agents/workspaces/${workspace.id}/submit-chatbot`,
+        { answers: chatbotQuestions },
+      );
+      setChatbotSubmitResult(result);
+      if (result.completed) {
+        setApplications((prev) =>
+          prev.map((a) => (a.id === selectedAppId ? { ...a, status: "submitted" } : a)),
+        );
+        setSubmitSuccess(true);
+      }
+    } catch (err) {
+      console.error("Chatbot submission failed:", err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // --- Form mode functions ---
+
+  const updateFormField = (key: string, value: string) => {
+    setAutoFillFields((prev) =>
+      prev.map((f) => (f.key === key ? { ...f, value } : f)),
+    );
+    setCompletenessResult(null);
+    setBestFitResult(null);
+  };
+
+  const runCompletenessCheck = async () => {
+    if (!workspace) return;
+    setCompletenessLoading(true);
+    setCompletenessResult(null);
+    try {
+      const result = await apiPost<CompletenessCheckResult>(
+        `/agents/workspaces/${workspace.id}/check-completeness`,
+        { fields: autoFillFields },
+      );
+      setCompletenessResult(result);
+    } catch (err) {
+      console.error("Completeness check failed:", err);
+    } finally {
+      setCompletenessLoading(false);
+    }
+  };
+
+  const runBestFitReview = async () => {
+    if (!workspace) return;
+    setBestFitLoading(true);
+    setBestFitResult(null);
+    try {
+      const result = await apiPost<BestFitReviewResult>(
+        `/agents/workspaces/${workspace.id}/best-fit-review`,
+        { fields: autoFillFields },
+      );
+      setBestFitResult(result);
+    } catch (err) {
+      console.error("Best-fit review failed:", err);
+    } finally {
+      setBestFitLoading(false);
+    }
+  };
+
+  const submitFormApplication = async () => {
+    if (!selectedAppId) return;
+    setSubmitting(true);
+    try {
+      await apiPut(`/applications/${selectedAppId}/status`, { status: "submitted" });
+      setApplications((prev) =>
+        prev.map((a) => (a.id === selectedAppId ? { ...a, status: "submitted" } : a)),
+      );
+      setSubmitSuccess(true);
+    } catch (err) {
+      console.error("Submit failed:", err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -694,22 +929,37 @@ export default function AgentsPage() {
                       })()}
 
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => runAgent(agent.key)}
-                          disabled={isRunning || pipelineRunning}
-                          className="flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 hover:bg-accent"
-                          style={{ borderColor: "var(--border)" }}
-                        >
-                          {isRunning ? (
-                            <span className="inline-flex items-center gap-1">
-                              <Loader2 className="h-3 w-3 animate-spin" /> Running...
-                            </span>
-                          ) : artifacts.length > 0 ? (
-                            "Re-run Agent"
-                          ) : (
-                            "Run Agent"
-                          )}
-                        </button>
+                        {agent.key === "auto_fill" ? (
+                          <button
+                            onClick={openAutoFillModal}
+                            disabled={pipelineRunning}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                            style={{
+                              backgroundColor: agent.color,
+                              color: "white",
+                            }}
+                          >
+                            <MousePointerClick className="h-3 w-3" />
+                            Open Application Form
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => runAgent(agent.key)}
+                            disabled={isRunning || pipelineRunning}
+                            className="flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 hover:bg-accent"
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            {isRunning ? (
+                              <span className="inline-flex items-center gap-1">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Running...
+                              </span>
+                            ) : artifacts.length > 0 ? (
+                              "Re-run Agent"
+                            ) : (
+                              "Run Agent"
+                            )}
+                          </button>
+                        )}
                         <button
                           onClick={() => chatWithAgent(agent)}
                           disabled={pipelineRunning}
@@ -903,6 +1153,396 @@ export default function AgentsPage() {
           </>
           );
         })()}
+
+        {/* ─── Auto-Fill Modal ─── */}
+        {showAutoFillModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center pt-[3vh] bg-black/50"
+            onClick={() => setShowAutoFillModal(false)}
+          >
+            <div
+              className="w-full max-w-4xl max-h-[94vh] flex flex-col rounded-xl border shadow-xl"
+              style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal header */}
+              <div className="flex items-center justify-between border-b px-6 py-4 shrink-0" style={{ borderColor: "var(--border)" }}>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: "rgba(14,165,233,0.1)", color: "rgb(14,165,233)" }}
+                  >
+                    <MousePointerClick className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-lg">
+                      {detectedMethod === "chatbot" ? "Chatbot Application Assistant" : "Job Application Form"}
+                    </h2>
+                    <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                      {autoFillJobTitle} at {autoFillJobCompany}
+                      {detectedMethod === "chatbot" && (
+                        <span className="ml-2 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ backgroundColor: "rgba(139,92,246,0.1)", color: "rgb(124,58,237)" }}>
+                          Chatbot
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setShowAutoFillModal(false)} className="rounded-md p-1.5 transition-colors hover:bg-accent">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Modal body */}
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                {/* Loading state */}
+                {autoFillLoading && (
+                  <div className="flex flex-col items-center justify-center py-20">
+                    <Loader2 className="h-10 w-10 animate-spin mb-4" style={{ color: "rgb(14,165,233)" }} />
+                    <p className="text-sm font-medium">
+                      {detectedMethod === "unknown"
+                        ? "Detecting application method..."
+                        : detectedMethod === "chatbot"
+                          ? "Simulating chatbot to collect questions..."
+                          : "Analyzing your profile and tailoring your application..."}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                      This may take a moment as AI prepares your responses.
+                    </p>
+                  </div>
+                )}
+
+                {/* Success state */}
+                {submitSuccess && (
+                  <div className="flex flex-col items-center justify-center py-20">
+                    <CheckCircle2 className="h-16 w-16 mb-4 text-green-500" />
+                    <h3 className="text-xl font-semibold mb-2">Application Submitted!</h3>
+                    <p className="text-sm text-center max-w-md" style={{ color: "var(--muted-foreground)" }}>
+                      Your application for <strong>{autoFillJobTitle}</strong> at <strong>{autoFillJobCompany}</strong> has been submitted.
+                    </p>
+                    {chatbotSubmitResult && chatbotSubmitResult.verification.length > 0 && (
+                      <div className="mt-4 w-full max-w-lg">
+                        <h4 className="text-sm font-semibold mb-2">Verification</h4>
+                        <div className="space-y-1">
+                          {chatbotSubmitResult.verification.map((v, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs">
+                              {v.match === "exact" || v.match === "partial" ? (
+                                <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                              ) : v.match === "unexpected" ? (
+                                <AlertCircle className="h-3 w-3 text-yellow-500 shrink-0" />
+                              ) : (
+                                <AlertCircle className="h-3 w-3 text-red-500 shrink-0" />
+                              )}
+                              <span style={{ color: "var(--muted-foreground)" }}>
+                                {v.match === "unexpected"
+                                  ? `New question from chatbot: "${(v.live || "").slice(0, 60)}..."`
+                                  : v.match === "missing"
+                                    ? `Expected question not asked: "${(v.simulated || "").slice(0, 60)}..."`
+                                    : `Matched: "${(v.simulated || "").slice(0, 50)}..."`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setShowAutoFillModal(false)}
+                      className="mt-6 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors"
+                      style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                    >
+                      Close
+                    </button>
+                  </div>
+                )}
+
+                {/* ═══ CHATBOT MODE ═══ */}
+                {!autoFillLoading && !submitSuccess && detectedMethod === "chatbot" && chatbotQuestions.length > 0 && (
+                  <div className="space-y-4">
+                    {/* Progress bar */}
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "var(--border)" }}>
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${(chatbotQuestions.filter((q) => q.status !== "pending").length / chatbotQuestions.length) * 100}%`,
+                            backgroundColor: "rgb(14,165,233)",
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
+                        {chatbotQuestions.filter((q) => q.status !== "pending").length} / {chatbotQuestions.length}
+                      </span>
+                    </div>
+
+                    {/* Question list (left) + Active question (right) */}
+                    <div className="flex gap-4">
+                      {/* Question sidebar */}
+                      <div className="w-56 shrink-0 space-y-1">
+                        {chatbotQuestions.map((q, i) => (
+                          <button
+                            key={i}
+                            onClick={() => goToQuestion(i)}
+                            className={`w-full flex items-center gap-2 rounded-md px-3 py-2 text-left text-xs transition-colors ${
+                              i === activeQuestionIdx ? "bg-accent font-medium" : "hover:bg-accent/50"
+                            }`}
+                          >
+                            {q.status === "accepted" ? (
+                              <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                            ) : q.status === "edited" ? (
+                              <CheckCircle2 className="h-3 w-3 text-blue-500 shrink-0" />
+                            ) : q.status === "skipped" ? (
+                              <Circle className="h-3 w-3 text-yellow-500 shrink-0" />
+                            ) : (
+                              <Circle className="h-3 w-3 shrink-0" style={{ color: "var(--muted-foreground)" }} />
+                            )}
+                            <span className="truncate">Q{i + 1}: {q.question.slice(0, 30)}...</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Active question panel */}
+                      <div className="flex-1">
+                        {(() => {
+                          const q = chatbotQuestions[activeQuestionIdx];
+                          if (!q) return null;
+                          return (
+                            <div className="space-y-4">
+                              {/* Bot question bubble */}
+                              <div className="rounded-xl px-4 py-3" style={{ backgroundColor: "var(--accent)" }}>
+                                <p className="text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>
+                                  Chatbot asks:
+                                </p>
+                                <p className="text-sm font-medium">{q.question}</p>
+                              </div>
+
+                              {/* AI suggested answer */}
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Sparkles className="h-3.5 w-3.5" style={{ color: "rgb(14,165,233)" }} />
+                                  <span className="text-xs font-medium">AI Suggested Answer</span>
+                                  <span
+                                    className="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                                    style={{
+                                      backgroundColor: q.confidence === "high" ? "rgba(16,185,129,0.1)" : q.confidence === "medium" ? "rgba(59,130,246,0.1)" : "rgba(234,179,8,0.1)",
+                                      color: q.confidence === "high" ? "rgb(5,150,105)" : q.confidence === "medium" ? "rgb(59,130,246)" : "rgb(161,98,7)",
+                                    }}
+                                  >
+                                    {q.confidence} confidence
+                                  </span>
+                                </div>
+                                <textarea
+                                  value={editingAnswer}
+                                  onChange={(e) => setEditingAnswer(e.target.value)}
+                                  rows={3}
+                                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                                  style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                                />
+                              </div>
+
+                              {/* Accept / Edit / Skip buttons */}
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={acceptAnswer}
+                                  className="inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors"
+                                  style={{ backgroundColor: "rgb(16,185,129)", color: "white" }}
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  Accept
+                                </button>
+                                <button
+                                  onClick={editAnswer}
+                                  disabled={editingAnswer === q.suggested_answer}
+                                  className="inline-flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 hover:bg-accent"
+                                  style={{ borderColor: "var(--border)" }}
+                                >
+                                  Save Edit
+                                </button>
+                                <button
+                                  onClick={skipAnswer}
+                                  className="inline-flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                                  style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}
+                                >
+                                  Skip
+                                </button>
+                              </div>
+
+                              {/* Status for current question */}
+                              {q.status !== "pending" && (
+                                <div className="flex items-center gap-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                                  {q.status === "accepted" && <><CheckCircle2 className="h-3 w-3 text-green-500" /> Accepted</>}
+                                  {q.status === "edited" && <><CheckCircle2 className="h-3 w-3 text-blue-500" /> Edited and saved</>}
+                                  {q.status === "skipped" && <><Circle className="h-3 w-3 text-yellow-500" /> Skipped — will not be sent</>}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Review summary when all done */}
+                    {allQuestionsReviewed && (
+                      <div className="rounded-lg border p-4 mt-4" style={{ borderColor: "rgb(14,165,233)", backgroundColor: "rgba(14,165,233,0.05)" }}>
+                        <h4 className="font-semibold text-sm mb-2">Ready to Submit</h4>
+                        <p className="text-xs mb-3" style={{ color: "var(--muted-foreground)" }}>
+                          {chatbotQuestions.filter((q) => q.status === "accepted").length} accepted,{" "}
+                          {chatbotQuestions.filter((q) => q.status === "edited").length} edited,{" "}
+                          {chatbotQuestions.filter((q) => q.status === "skipped").length} skipped.
+                          The chatbot will be driven with your approved answers and verified against the simulation.
+                        </p>
+                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                          {chatbotQuestions.filter((q) => q.status !== "skipped").map((q, i) => (
+                            <div key={i} className="flex gap-2 text-xs">
+                              <span className="font-medium shrink-0 w-16">Q{q.index + 1}:</span>
+                              <span className="truncate" style={{ color: "var(--muted-foreground)" }}>
+                                {q.approved_answer || "(empty)"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ═══ FORM MODE ═══ */}
+                {!autoFillLoading && !submitSuccess && detectedMethod !== "chatbot" && autoFillFields.length > 0 && (
+                  <div className="space-y-6">
+                    {(["personal", "professional", "additional"] as const).map((section) => {
+                      const sectionFields = autoFillFields.filter((f) => f.section === section);
+                      if (sectionFields.length === 0) return null;
+                      const sectionLabel = { personal: "Personal Information", professional: "Professional Details", additional: "Additional Questions" }[section];
+                      return (
+                        <div key={section}>
+                          <h3 className="font-semibold text-sm mb-3 pb-2 border-b" style={{ borderColor: "var(--border)" }}>{sectionLabel}</h3>
+                          <div className="space-y-4">
+                            {sectionFields.map((field) => {
+                              const cIssue = completenessResult?.issues.find((i) => i.field_key === field.key);
+                              const bfImprove = bestFitResult?.improvements.find((i) => i.field_key === field.key);
+                              return (
+                                <div key={field.key}>
+                                  <label className="block text-sm font-medium mb-1">
+                                    {field.label}{field.required && <span className="text-red-500 ml-0.5">*</span>}
+                                  </label>
+                                  {field.field_type === "textarea" ? (
+                                    <textarea value={field.value} onChange={(e) => updateFormField(field.key, e.target.value)} rows={field.key === "cover_letter" ? 8 : 4}
+                                      className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                                      style={{ backgroundColor: "var(--background)", borderColor: cIssue ? "rgb(239,68,68)" : bfImprove ? "rgb(234,179,8)" : "var(--border)" }} />
+                                  ) : field.field_type === "select" ? (
+                                    <select value={field.value} onChange={(e) => updateFormField(field.key, e.target.value)}
+                                      className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                                      style={{ backgroundColor: "var(--background)", borderColor: cIssue ? "rgb(239,68,68)" : "var(--border)" }}>
+                                      <option value="">Select...</option>
+                                      {field.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                                    </select>
+                                  ) : (
+                                    <input type={field.field_type} value={field.value} onChange={(e) => updateFormField(field.key, e.target.value)}
+                                      className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                                      style={{ backgroundColor: "var(--background)", borderColor: cIssue ? "rgb(239,68,68)" : bfImprove ? "rgb(234,179,8)" : "var(--border)" }} />
+                                  )}
+                                  {cIssue && <div className="flex items-center gap-1.5 mt-1"><AlertCircle className="h-3 w-3 text-red-500 shrink-0" /><p className="text-xs text-red-500">{cIssue.issue}</p></div>}
+                                  {bfImprove && (
+                                    <div className="mt-1.5 rounded-md border px-3 py-2" style={{ backgroundColor: "rgba(234,179,8,0.05)", borderColor: "rgba(234,179,8,0.3)" }}>
+                                      <div className="flex items-start gap-1.5">
+                                        <Sparkles className="h-3 w-3 mt-0.5 shrink-0" style={{ color: "rgb(234,179,8)" }} />
+                                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}><strong style={{ color: "rgb(161,98,7)" }}>Suggestion:</strong> {bfImprove.suggestion}</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {completenessResult && (
+                      <div className="rounded-lg border p-4" style={{ borderColor: completenessResult.complete ? "rgb(16,185,129)" : "rgb(239,68,68)", backgroundColor: completenessResult.complete ? "rgba(16,185,129,0.05)" : "rgba(239,68,68,0.05)" }}>
+                        <div className="flex items-center gap-2 mb-1">
+                          {completenessResult.complete ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <TriangleAlert className="h-4 w-4 text-red-500" />}
+                          <h4 className="font-semibold text-sm">{completenessResult.complete ? "All fields complete!" : `${completenessResult.issues.length} issue(s) found`}</h4>
+                        </div>
+                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{completenessResult.filled_fields} of {completenessResult.total_fields} fields filled.</p>
+                      </div>
+                    )}
+                    {bestFitResult && (
+                      <div className="rounded-lg border p-4" style={{ borderColor: bestFitResult.verdict === "strong" ? "rgb(16,185,129)" : bestFitResult.verdict === "good" ? "rgb(59,130,246)" : "rgb(234,179,8)", backgroundColor: bestFitResult.verdict === "strong" ? "rgba(16,185,129,0.05)" : bestFitResult.verdict === "good" ? "rgba(59,130,246,0.05)" : "rgba(234,179,8,0.05)" }}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="h-4 w-4" style={{ color: bestFitResult.verdict === "strong" ? "rgb(16,185,129)" : bestFitResult.verdict === "good" ? "rgb(59,130,246)" : "rgb(234,179,8)" }} />
+                            <h4 className="font-semibold text-sm">Best-Fit Score: {bestFitResult.score}/100</h4>
+                          </div>
+                          <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: bestFitResult.verdict === "strong" ? "rgba(16,185,129,0.1)" : bestFitResult.verdict === "good" ? "rgba(59,130,246,0.1)" : "rgba(234,179,8,0.1)", color: bestFitResult.verdict === "strong" ? "rgb(5,150,105)" : bestFitResult.verdict === "good" ? "rgb(59,130,246)" : "rgb(161,98,7)" }}>
+                            {bestFitResult.verdict === "strong" ? "Strong Match" : bestFitResult.verdict === "good" ? "Good Match" : "Needs Work"}
+                          </span>
+                        </div>
+                        <p className="text-sm mb-3" style={{ color: "var(--muted-foreground)" }}>{bestFitResult.summary}</p>
+                        {bestFitResult.strengths.length > 0 && (
+                          <div className="mb-2">
+                            <p className="text-xs font-medium mb-1" style={{ color: "rgb(5,150,105)" }}>Strengths:</p>
+                            <ul className="text-xs space-y-0.5" style={{ color: "var(--muted-foreground)" }}>
+                              {bestFitResult.strengths.map((s, i) => <li key={i} className="flex items-start gap-1.5"><CheckCircle2 className="h-3 w-3 text-green-500 mt-0.5 shrink-0" />{s}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        {bestFitResult.improvements.length > 0 && (
+                          <p className="text-xs" style={{ color: "rgb(161,98,7)" }}>See yellow-highlighted fields above for {bestFitResult.improvements.length} improvement(s).</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal footer */}
+              {!autoFillLoading && !submitSuccess && (
+                <div className="border-t px-6 py-4 flex items-center justify-between shrink-0" style={{ borderColor: "var(--border)" }}>
+                  {detectedMethod === "chatbot" ? (
+                    /* Chatbot footer */
+                    <>
+                      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                        Review each question, then submit to the chatbot.
+                      </p>
+                      <button
+                        onClick={submitChatbot}
+                        disabled={!allQuestionsReviewed || submitting}
+                        className="inline-flex items-center gap-2 rounded-md px-5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                        style={{ backgroundColor: allQuestionsReviewed ? "rgb(16,185,129)" : "var(--muted)", color: "white" }}
+                      >
+                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizonal className="h-4 w-4" />}
+                        Submit to Chatbot
+                      </button>
+                    </>
+                  ) : autoFillFields.length > 0 ? (
+                    /* Form footer */
+                    <>
+                      <div className="flex gap-2">
+                        <button onClick={runCompletenessCheck} disabled={completenessLoading || bestFitLoading}
+                          className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 hover:bg-accent"
+                          style={{ borderColor: "var(--border)" }}>
+                          {completenessLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCheckIcon className="h-4 w-4" />}
+                          Check Completeness
+                        </button>
+                        <button onClick={runBestFitReview} disabled={bestFitLoading || completenessLoading}
+                          className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 hover:bg-accent"
+                          style={{ borderColor: "var(--border)" }}>
+                          {bestFitLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                          Best-Fit Review
+                        </button>
+                      </div>
+                      <button onClick={submitFormApplication} disabled={submitting}
+                        className="inline-flex items-center gap-2 rounded-md px-5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                        style={{ backgroundColor: "rgb(16,185,129)", color: "white" }}>
+                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizonal className="h-4 w-4" />}
+                        Submit Application
+                      </button>
+                    </>
+                  ) : <div />}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
