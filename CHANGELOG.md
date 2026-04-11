@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.0] - 2026-04-09
+
+### Added
+- **Resume Variants System**: manage multiple resume versions (e.g., AI Security Lead, Director of Security, Adaptable Architect) with separate content, targeting criteria, and matching keywords
+- Version control on each variant: edit, save new versions, restore previous versions, side-by-side diff comparison between any two versions
+- Drag-and-drop/browse upload for each variant with AI-powered adaptive extraction that maps statements to multiple fields
+- Review screen after AI extraction where user can confirm, adjust, or correct before saving
+- Auto-matching engine that recommends which variant to use based on job description keywords and target role matching
+- Tailor Agent integration: starts from matched variant as base, produces tailored version, then evaluates both and recommends which has a better chance of landing an interview
+- Application model extended with `resume_variant_id` and `resume_type` (original vs tailored) for tracking which version was used
+- Interview success tracking stats endpoint (`GET /api/resume-variants/stats`): shows applications, interview rate, and offer rate per variant
+- Stats UI on Resumes page with sortable table showing which variants win the most interviews
+- Resume Variants sidebar navigation, breadcrumbs, and quick search integration
+- Alembic migration 013: `resume_variants` and `resume_variant_versions` tables, application FK columns, RBAC permissions
+
 ## [0.13.0] - 2026-03-21
 
 ### Added

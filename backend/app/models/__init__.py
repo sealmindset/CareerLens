@@ -10,6 +10,7 @@ from app.models.managed_prompt import ManagedPrompt, PromptVersion, PromptAuditL
 from app.models.workspace import AgentWorkspace, WorkspaceArtifact, PipelineRun
 from app.models.embedding import ProfileChunk
 from app.models.app_setting import AppSetting, AppSettingAuditLog
+from app.models.resume_variant import ResumeVariant, ResumeVariantVersion
 
 __all__ = [
     "Base", "User", "Role", "Permission", "RolePermission",
@@ -20,4 +21,5 @@ __all__ = [
     "AgentWorkspace", "WorkspaceArtifact", "PipelineRun",
     "ProfileChunk",
     "AppSetting", "AppSettingAuditLog",
+    "ResumeVariant", "ResumeVariantVersion",
 ]

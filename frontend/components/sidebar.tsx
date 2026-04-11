@@ -12,6 +12,7 @@ import {
   Shield,
   Briefcase,
   FileText,
+  FileStack,
   Bot,
   UserCircle,
   MessageSquareCode,
@@ -38,6 +39,12 @@ const mainNavItems: NavItem[] = [
     href: "/profile",
     icon: UserCircle,
     permission: { resource: "profile", action: "view" },
+  },
+  {
+    label: "Resumes",
+    href: "/resumes",
+    icon: FileStack,
+    permission: { resource: "resumes", action: "view" },
   },
   {
     label: "Job Listings",

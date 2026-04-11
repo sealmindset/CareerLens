@@ -158,6 +158,9 @@ export interface Application {
   submitted_at: string | null;
   follow_up_date: string | null;
   notes: string | null;
+  resume_variant_id: string | null;
+  resume_type: string | null;
+  resume_variant_name: string | null;
   job_title: string | null;
   job_company: string | null;
   created_at: string;
@@ -320,6 +323,111 @@ export interface BestFitReviewResult {
     current_value: string;
     suggestion: string;
   }[];
+}
+
+// Resume Variant types
+export interface ResumeVariant {
+  id: string;
+  user_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  target_roles: string | null;
+  matching_keywords: string[] | null;
+  usage_guidance: string | null;
+  is_default: boolean;
+  headline: string | null;
+  summary: string | null;
+  raw_resume_text: string | null;
+  skills: Record<string, unknown>[] | null;
+  experiences: Record<string, unknown>[] | null;
+  educations: Record<string, unknown>[] | null;
+  certifications: Record<string, unknown>[] | null;
+  additional_sections: Record<string, unknown> | null;
+  current_version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResumeVariantVersion {
+  id: string;
+  variant_id: string;
+  version_number: number;
+  headline: string | null;
+  summary: string | null;
+  raw_resume_text: string | null;
+  skills: Record<string, unknown>[] | null;
+  experiences: Record<string, unknown>[] | null;
+  educations: Record<string, unknown>[] | null;
+  certifications: Record<string, unknown>[] | null;
+  additional_sections: Record<string, unknown> | null;
+  change_summary: string | null;
+  created_at: string;
+}
+
+export interface ResumeVariantDetail extends ResumeVariant {
+  versions: ResumeVariantVersion[];
+}
+
+export interface ResumeUploadExtraction {
+  headline: string | null;
+  summary: string | null;
+  skills: { skill_name: string; proficiency_level: string; years_experience: number | null; context: string | null }[];
+  experiences: { company: string; title: string; description: string | null; start_date: string | null; end_date: string | null; is_current: boolean; accomplishments: string[] | null; leadership_indicators: string[] | null; scope_metrics: Record<string, unknown> | null }[];
+  educations: { institution: string; degree: string | null; field_of_study: string | null; graduation_date: string | null; relevant_coursework: string[] | null }[];
+  certifications: { name: string; issuer: string | null; date_obtained: string | null; expiry_date: string | null }[];
+  additional_sections: Record<string, unknown> | null;
+  raw_resume_text: string;
+}
+
+export interface VariantMatchResult {
+  variant_id: string;
+  variant_name: string;
+  slug: string;
+  is_default: boolean;
+  match_score: number;
+  reasoning: string;
+  matched_keywords: string[];
+}
+
+export interface VariantDiffResult {
+  version_a: number;
+  version_b: number;
+  sections: { section: string; label: string; value_a: string; value_b: string; changed: boolean }[];
+}
+
+export interface VariantEvaluationResult {
+  recommended: string;
+  reasoning: string;
+  original_strengths: string[];
+  tailored_strengths: string[];
+  key_differences: string[];
+}
+
+export interface VariantStatusBreakdown {
+  submitted: number;
+  interviewing: number;
+  offer: number;
+  rejected: number;
+  withdrawn: number;
+  other: number;
+}
+
+export interface VariantStatsItem {
+  variant_id: string;
+  variant_name: string;
+  is_default: boolean;
+  total_applications: number;
+  original_count: number;
+  tailored_count: number;
+  status_breakdown: VariantStatusBreakdown;
+  interview_rate: number;
+  offer_rate: number;
+}
+
+export interface VariantStatsResponse {
+  variants: VariantStatsItem[];
+  unlinked_applications: number;
 }
 
 // Chatbot simulation types (Auto-Fill modal, chatbot mode)

@@ -32,7 +32,7 @@ async def _get_user_id(db: AsyncSession, current_user: UserInfo) -> uuid.UUID:
 
 
 def _enrich_application(app: Application) -> dict:
-    """Add job_title and job_company from the job_listing relationship."""
+    """Add job_title, job_company, and resume_variant_name from relationships."""
     data = {c.key: getattr(app, c.key) for c in app.__table__.columns}
     if app.job_listing:
         data["job_title"] = app.job_listing.title
@@ -40,6 +40,7 @@ def _enrich_application(app: Application) -> dict:
     else:
         data["job_title"] = None
         data["job_company"] = None
+    data["resume_variant_name"] = app.resume_variant.name if app.resume_variant else None
     return data
 
 

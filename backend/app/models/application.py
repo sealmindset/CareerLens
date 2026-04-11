@@ -45,6 +45,12 @@ class Application(Base):
     submitted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    resume_variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("resume_variants.id", ondelete="SET NULL"), nullable=True
+    )
+    resume_type: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, default="original"
+    )
     follow_up_date: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -60,3 +66,4 @@ class Application(Base):
     # Relationships
     user = relationship("User", backref="applications", lazy="selectin")
     job_listing = relationship("JobListing", backref="application", lazy="selectin")
+    resume_variant = relationship("ResumeVariant", lazy="selectin")

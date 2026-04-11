@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import auth, permissions, roles, users, prompts
 from app.routers import profile, jobs, applications, agents, dashboard
+from app.routers import resume_variants
 from app.routers import settings as settings_router
 
 app = FastAPI(title="career-lens", version="0.1.0")
@@ -41,4 +42,5 @@ app.include_router(jobs.router)
 app.include_router(applications.router)
 app.include_router(agents.router)
 app.include_router(dashboard.router)
+app.include_router(resume_variants.router)
 app.include_router(settings_router.router)

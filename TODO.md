@@ -17,6 +17,7 @@
 ## Medium Priority
 - [ ] Implement application follow-up reminders (email/notification)
 - [x] Add resume version history per application
+- [x] Add resume variants system with version control, AI upload, auto-matching, tailor evaluation, and interview success tracking
 - [x] Add markdown rendering for agent artifacts (currently plain text)
 - [x] Add artifact export (download as PDF/Word)
 - [ ] NeMo Guardrails AI safety testing suite

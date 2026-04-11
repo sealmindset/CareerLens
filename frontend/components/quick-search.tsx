@@ -22,6 +22,12 @@ const navigationItems: SearchItem[] = [
     permission: { resource: "profile", action: "view" },
   },
   {
+    label: "Resume Variants",
+    href: "/resumes",
+    keywords: ["resumes", "variants", "cv", "versions", "tailor", "upload"],
+    permission: { resource: "resumes", action: "view" },
+  },
+  {
     label: "Job Listings",
     href: "/jobs",
     keywords: ["jobs", "positions", "openings", "companies"],

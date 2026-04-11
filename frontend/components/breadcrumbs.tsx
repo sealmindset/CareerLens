@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const segmentLabels: Record<string, string> = {
   dashboard: "Dashboard",
   profile: "My Profile",
+  resumes: "Resumes",
   jobs: "Job Listings",
   agents: "Application Studio",
   settings: "Settings",
