@@ -17,3 +17,5 @@ reportlab
 pgvector
 openai
 playwright
+pytest
+pytest-asyncio
