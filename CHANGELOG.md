@@ -2,6 +2,11 @@
 
 ## [0.14.1] - 2026-04-11
 
+### Added
+- **Build Profile from Variants**: "Build from Variants" button on Profile page synthesizes a master profile from all resume variants, unioning unique skills, experiences, and educations (gap-fill only -- existing data is preserved)
+- AI-powered headline and summary synthesis when profile fields are blank (uses strongest phrasing across all variants)
+- Auto-rebuild: profile automatically updates in the background whenever a variant's content is saved or uploaded
+
 ### Fixed
 - **Application Studio**: Artifact viewer now auto-scrolls into view when selecting an analysis result, so results are no longer hidden off-screen
 - **Application Studio**: Download buttons (PDF/DOCX) now show a loading spinner during download and display an error message on failure instead of silently failing

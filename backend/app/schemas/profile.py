@@ -132,3 +132,14 @@ class BrandAIRequest(BaseModel):
 
 class BrandAIResponse(BaseModel):
     suggestion: str
+
+
+# --- Build Profile from Variants ---
+class ProfileBuildResult(BaseModel):
+    skills_added: int = 0
+    experiences_added: int = 0
+    educations_added: int = 0
+    headline_updated: bool = False
+    summary_updated: bool = False
+    variants_processed: int = 0
+    skipped_reason: str | None = None

@@ -96,6 +96,16 @@ export interface ResumeUploadResult {
   error: string | null;
 }
 
+export interface ProfileBuildResult {
+  skills_added: number;
+  experiences_added: number;
+  educations_added: number;
+  headline_updated: boolean;
+  summary_updated: boolean;
+  variants_processed: number;
+  skipped_reason: string | null;
+}
+
 export interface ExperienceAIResponse {
   suggestion: string;
 }

@@ -12,7 +12,7 @@ from app.models.profile import Profile, ProfileSkill, ProfileExperience, Profile
 from app.models.user import User
 from app.schemas.auth import UserInfo
 from app.schemas.profile import (
-    ProfileOut, ProfileUpdate, ResumeUploadResult,
+    ProfileOut, ProfileUpdate, ResumeUploadResult, ProfileBuildResult,
     SkillCreate, SkillOut,
     ExperienceCreate, ExperienceOut,
     EducationCreate, EducationOut,
@@ -96,6 +96,18 @@ async def reindex_profile(
     count = await index_profile(db, profile)
     await db.commit()
     return {"chunks_indexed": count}
+
+
+@router.post("/build-from-variants", response_model=ProfileBuildResult)
+async def build_from_variants(
+    current_user: UserInfo = Depends(require_permission("profile", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Build/enrich profile by synthesizing data from all resume variants."""
+    from app.services.profile_builder import build_profile_from_variants
+
+    user_id = await _get_user_id(db, current_user)
+    return await build_profile_from_variants(db, user_id)
 
 
 @router.post("/skills", response_model=SkillOut, status_code=status.HTTP_201_CREATED)

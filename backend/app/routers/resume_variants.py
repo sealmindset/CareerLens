@@ -3,7 +3,9 @@ import re
 import uuid
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+import time
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,6 +65,36 @@ def _snapshot_version(variant: ResumeVariant, change_summary: str | None = None)
         additional_sections=variant.additional_sections,
         change_summary=change_summary,
     )
+
+
+# --- Background profile rebuild on variant change ---
+
+_rebuild_locks: dict[uuid.UUID, float] = {}
+_REBUILD_COOLDOWN = 10.0  # seconds
+
+
+async def _rebuild_profile_background(user_id: uuid.UUID) -> None:
+    """Rebuild the user's profile from variants (runs after response is sent)."""
+    now = time.monotonic()
+    last = _rebuild_locks.get(user_id, 0.0)
+    if now - last < _REBUILD_COOLDOWN:
+        logger.debug("Skipping profile rebuild for user %s (cooldown)", user_id)
+        return
+    _rebuild_locks[user_id] = now
+
+    from app.database import async_session
+    from app.services.profile_builder import build_profile_from_variants
+
+    async with async_session() as db:
+        try:
+            result = await build_profile_from_variants(db, user_id)
+            logger.info(
+                "Auto-rebuilt profile for user %s: +%d skills, +%d exp, +%d edu",
+                user_id, result.skills_added, result.experiences_added,
+                result.educations_added,
+            )
+        except Exception:
+            logger.exception("Background profile rebuild failed for user %s", user_id)
 
 
 # --- CRUD ---
@@ -256,6 +288,7 @@ async def create_variant(
 async def update_variant(
     variant_id: uuid.UUID,
     data: ResumeVariantUpdate,
+    background_tasks: BackgroundTasks,
     current_user: UserInfo = Depends(require_permission("resumes", "edit")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -309,6 +342,11 @@ async def update_variant(
 
     await db.commit()
     await db.refresh(variant)
+
+    # Auto-rebuild profile when variant content changes
+    if content_changed:
+        background_tasks.add_task(_rebuild_profile_background, user_id)
+
     return variant
 
 
@@ -525,6 +563,7 @@ async def upload_resume_to_variant(
 async def save_upload_review(
     variant_id: uuid.UUID,
     data: ResumeUploadReviewRequest,
+    background_tasks: BackgroundTasks,
     current_user: UserInfo = Depends(require_permission("resumes", "edit")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -559,6 +598,10 @@ async def save_upload_review(
 
     await db.commit()
     await db.refresh(variant)
+
+    # Auto-rebuild profile from updated variant data
+    background_tasks.add_task(_rebuild_profile_background, user_id)
+
     return variant
 
 

@@ -10,6 +10,7 @@ import type {
   ProfileExperience,
   ProfileEducation,
   ResumeUploadResult,
+  ProfileBuildResult,
   ExperienceAIResponse,
   BrandAIResponse,
 } from "@/lib/types";
@@ -52,6 +53,11 @@ export default function ProfilePage() {
   const [uploadResult, setUploadResult] = useState<ResumeUploadResult | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [dragOver, setDragOver] = useState(false);
+
+  // Build from variants
+  const [building, setBuilding] = useState(false);
+  const [buildResult, setBuildResult] = useState<ProfileBuildResult | null>(null);
+  const [buildError, setBuildError] = useState("");
 
   // LinkedIn import
   const [linkedinImporting, setLinkedinImporting] = useState(false);
@@ -159,6 +165,22 @@ export default function ProfilePage() {
       console.error("Failed to save profile:", err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const buildFromVariants = async () => {
+    setBuilding(true);
+    setBuildResult(null);
+    setBuildError("");
+    try {
+      const result = await apiPost<ProfileBuildResult>("/profile/build-from-variants");
+      setBuildResult(result);
+      await fetchProfile();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Build failed";
+      setBuildError(message);
+    } finally {
+      setBuilding(false);
     }
   };
 
@@ -629,20 +651,81 @@ export default function ProfilePage() {
           </p>
         </div>
         {canEdit && (
-          <button
-            onClick={saveProfile}
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
-            style={{
-              backgroundColor: "var(--primary)",
-              color: "var(--primary-foreground)",
-            }}
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save Profile
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={buildFromVariants}
+              disabled={building}
+              className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {building ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Build from Variants
+            </button>
+            <button
+              onClick={saveProfile}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+              style={{
+                backgroundColor: "var(--primary)",
+                color: "var(--primary-foreground)",
+              }}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Profile
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Build from variants result/error */}
+      {buildResult && !buildResult.skipped_reason && (
+        <div
+          className="flex items-start gap-3 rounded-md border p-3"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)" }}
+        >
+          <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: "hsl(142, 76%, 36%)" }} />
+          <div className="text-sm">
+            <p className="font-medium">Profile built from {buildResult.variants_processed} variant(s)</p>
+            <p style={{ color: "var(--muted-foreground)" }}>
+              {buildResult.skills_added > 0 && `${buildResult.skills_added} skill(s) added. `}
+              {buildResult.experiences_added > 0 && `${buildResult.experiences_added} experience(s) added. `}
+              {buildResult.educations_added > 0 && `${buildResult.educations_added} education(s) added. `}
+              {buildResult.headline_updated && "Headline updated. "}
+              {buildResult.summary_updated && "Summary updated. "}
+              {buildResult.skills_added === 0 && buildResult.experiences_added === 0 &&
+               buildResult.educations_added === 0 && !buildResult.headline_updated &&
+               !buildResult.summary_updated && "Profile is already up to date."}
+            </p>
+          </div>
+          <button onClick={() => setBuildResult(null)} className="ml-auto">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      {buildResult?.skipped_reason && (
+        <div
+          className="flex items-start gap-3 rounded-md border p-3"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)" }}
+        >
+          <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: "var(--muted-foreground)" }} />
+          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>{buildResult.skipped_reason}</p>
+          <button onClick={() => setBuildResult(null)} className="ml-auto">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      {buildError && (
+        <div
+          className="flex items-start gap-3 rounded-md border p-3"
+          style={{ borderColor: "hsl(0, 84%, 60%)", backgroundColor: "hsl(0, 84%, 97%)" }}
+        >
+          <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: "hsl(0, 84%, 60%)" }} />
+          <p className="text-sm" style={{ color: "hsl(0, 84%, 40%)" }}>{buildError}</p>
+          <button onClick={() => setBuildError("")} className="ml-auto">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Headline */}
       <div
