@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { Sidebar, SidebarTrigger } from "@/components/sidebar";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { QuickSearch } from "@/components/quick-search";
+import { NotificationBell } from "@/components/notification-bell";
 import { ModeToggle } from "@/components/mode-toggle";
 
 function AuthenticatedShell({ children }: { children: React.ReactNode }) {
@@ -45,6 +46,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
           <Breadcrumbs />
           <div className="flex-1" />
           <QuickSearch />
+          <NotificationBell />
           <ModeToggle />
         </header>
 

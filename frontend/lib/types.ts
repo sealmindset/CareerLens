@@ -516,6 +516,33 @@ export interface PropagateApplyResponse {
   profile_change_summary: string | null;
 }
 
+// Notification types
+export interface NotificationItem {
+  id: string;
+  recipient_type: string;
+  recipient_id: string | null;
+  notification_type: string;
+  title: string;
+  message: string | null;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  sent_by: string | null;
+  sent_at: string;
+  read_at: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface NotificationListResponse {
+  notifications: NotificationItem[];
+  unread_count: number;
+  total: number;
+}
+
+export interface NotificationCountResponse {
+  unread_count: number;
+}
+
 // Chatbot simulation types (Auto-Fill modal, chatbot mode)
 export interface DetectedMethodResult {
   method: string;

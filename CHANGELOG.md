@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.16.0] - 2026-04-12
+
+### Added
+- **In-App Notifications**: Real-time notification system with bell icon in header, dropdown panel, and detail view
+- Database `notifications` table with broadcast/targeted recipient support (N01)
+- Notification query helper with user-scoped visibility and unread filtering (N02)
+- REST API: `GET /api/notifications`, `GET /api/notifications/count`, `PATCH /api/notifications` (N03)
+- Notification bell component with unread badge, 30s polling, dropdown list, and detail dialog (N04)
+- Entity-to-route mapping for "Go to" navigation from notification detail (N05)
+- Color-coded notification types: Pipeline Complete, Story Ready, Status Change, Assignment, System (N06)
+- 8 seed notifications across multiple types, users, and read states (N07)
+- Server-side-only notification creation via `create_notification()` service (N08)
+
 ## [0.15.1] - 2026-04-12
 
 ### Changed
