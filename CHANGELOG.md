@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.15.1] - 2026-04-12
+
+### Changed
+- **AI Instructions upgrade**: Prompt management UI upgraded from table layout to card-based registry with 5 scaffold components
+- New components: `prompt-card`, `prompt-editor`, `safety-indicator`, `variable-pill`, `version-timeline`
+- Card grid shows agent icon, description, template variables as interactive pills, safety status, model tier, and version count
+- Editor modal enhanced with tabbed interface (Editor / Settings / History), temperature slider, and version restore
+- Version history now displays as a visual timeline with expandable entries and restore-to-editor
+- Safety indicator shows shield icon with status color-coding (published/testing/draft)
+- Template `{{variables}}` auto-detected and rendered as purple pills
+- Sidebar label changed from "Prompts" to "AI Instructions"
+
 ## [0.15.0] - 2026-04-12
 
 ### Added

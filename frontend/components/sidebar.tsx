@@ -81,7 +81,7 @@ const adminNavItems: NavItem[] = [
     permission: { resource: "roles", action: "view" },
   },
   {
-    label: "Prompts",
+    label: "AI Instructions",
     href: "/admin/prompts",
     icon: MessageSquareCode,
     permission: { resource: "prompts", action: "view" },
