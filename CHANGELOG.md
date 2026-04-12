@@ -18,6 +18,19 @@
 - Story reuse tracking (times_used counter) and summary stats (total, active, archived, unique companies)
 - Story Bank sidebar navigation, quick search, and breadcrumb integration
 - Alembic migration 015: `story_bank_stories` and `story_bank_versions` tables, RBAC permissions
+- **Story Bank AI Interview**: "Ask AI" button on each story opens a full-page interview modal for fact-checking and refinement
+- AI-guided interview phase: asks 3-5 targeted questions to surface inaccuracies in AI-generated stories (inflated team sizes, vague metrics, invented outcomes)
+- Free-form chat phase: continue refining specific sections conversationally after the guided interview
+- Side-by-side comparison of original vs AI-revised story with edit-before-save option
+- Stateless conversation: follows Experience AI Assistant pattern (no new DB tables -- frontend manages chat history)
+- Alembic migration 016: managed prompt seed for Story Interviewer agent
+- **Story Bank Feedback Loop**: revised story corrections propagate back to improve the rest of the system
+- Story → Resume Variant: after saving a revised story, opt-in to update the matching accomplishment bullet in the source variant (with version snapshot)
+- Story → Profile: opt-in to update the matching profile experience description with corrected facts
+- Story → Tailor Agent: verified interview stories are injected into the Tailor prompt so future tailored resumes use fact-checked details instead of AI inferences
+- Fix: Talking Points agent now links new stories to their source variant via `source_variant_id` (was always null)
+- Propagate preview/apply flow: AI generates suggested updates, user reviews side-by-side and approves before any changes are written
+- Shared text matching utility extracted for reuse across Story Bank and propagation endpoints
 
 ## [0.14.1] - 2026-04-11
 

@@ -491,6 +491,31 @@ export interface StoryBankSummary {
   most_recent_update: string | null;
 }
 
+export interface StoryAIResponse {
+  suggestion: string;
+}
+
+// Story propagation (feedback loop) types
+export interface PropagateTarget {
+  target_type: string;
+  original_text: string;
+  suggested_text: string;
+  entity_id: string;
+  entity_label: string;
+}
+
+export interface PropagatePreviewResponse {
+  targets: PropagateTarget[];
+  story_id: string;
+}
+
+export interface PropagateApplyResponse {
+  variant_updated: boolean;
+  profile_updated: boolean;
+  variant_change_summary: string | null;
+  profile_change_summary: string | null;
+}
+
 // Chatbot simulation types (Auto-Fill modal, chatbot mode)
 export interface DetectedMethodResult {
   method: string;

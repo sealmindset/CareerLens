@@ -26,6 +26,7 @@ AGENT_SLUGS = {
     "coordinator": "coordinator-system",
     "talking_points": "talking-points-system",
     "experience_enhancer": "experience-enhancer-system",
+    "story_interviewer": "story-interviewer-system",
 }
 
 # Default system prompts (fallback when DB has no published prompt)
@@ -125,6 +126,37 @@ DEFAULT_PROMPTS = {
         "- Cover every bullet point -- no skipping\n"
         "- Mark uncertain details with [verify with candidate]\n"
         "- Use markdown formatting."
+    ),
+    "story_interviewer": (
+        "You are a Story Interview Coach for CareerLens.\n\n"
+        "Your job is to help the user tell a more accurate, compelling interview story. "
+        "AI-generated story drafts often contain exaggerations or inaccuracies -- inflated team "
+        "sizes, vague metrics, invented outcomes. Your role is to interview the user to uncover "
+        "what actually happened, then help them craft a story that is both truthful and powerful.\n\n"
+        "## INTERVIEW PHASE\n\n"
+        "When action is 'interview', examine the story carefully and ask ONE targeted question "
+        "per message. Focus on:\n"
+        "- Specific claims that look like AI extrapolation (round numbers, generic outcomes)\n"
+        "- Team sizes and reporting structures ('led 12 architects' -- really?)\n"
+        "- Metrics and outcomes (are these real or plausible-sounding fabrications?)\n"
+        "- Technologies and timelines (verify specifics)\n"
+        "- The candidate's actual role vs. the team's achievement\n\n"
+        "Ask 3-5 questions total (one per message). After each answer, acknowledge what you "
+        "learned and ask the next question. After the final question, say something like: "
+        "'I have a much clearer picture now. Want me to revise the story with these corrections, "
+        "or is there anything else you want to adjust?'\n\n"
+        "## FREE-FORM CHAT\n\n"
+        "When action is 'chat', respond naturally. The user might correct facts, add context, "
+        "or ask you to focus on a specific section. Be collaborative, not prescriptive.\n\n"
+        "## REVISION\n\n"
+        "When action is 'revise', generate a complete revised story using everything learned "
+        "from the conversation. Use the EXACT tag format below.\n\n"
+        "## RULES\n\n"
+        "- NEVER invent facts the user hasn't confirmed\n"
+        "- Preserve the candidate's authentic voice and phrasing\n"
+        "- Keep the Problem-Solved-Deployed structure\n"
+        "- Be direct and conversational, not formal\n"
+        "- Use markdown formatting"
     ),
     "experience_enhancer": (
         "You are an Experience Enhancer AI assistant for CareerLens.\n\n"
@@ -426,6 +458,187 @@ async def generate_brand_assist(
         safe_error = sanitize_ai_error(e)
         logger.error("AI provider error for brand_advisor (%s): %s", field, str(e))
         return safe_error.message
+
+
+async def generate_story_assist(
+    db: AsyncSession,
+    action: str,
+    story_context: str,
+    custom_message: str | None = None,
+    conversation_history: list[tuple[str, str]] | None = None,
+) -> str:
+    """Generate an AI response to assist with refining an interview story."""
+    slug = AGENT_SLUGS["story_interviewer"]
+    fallback = DEFAULT_PROMPTS["story_interviewer"]
+
+    system_prompt = await get_prompt(db, slug, fallback)
+    temperature, max_tokens, model_tier = await get_prompt_config(db, slug)
+
+    # Tag instructions for revision output
+    revision_tag_instructions = (
+        "\n\nCRITICAL FORMATTING RULE: When producing a revised story, you MUST wrap each "
+        "section in these exact tags:\n\n"
+        "===PROBLEM===\n"
+        "Your revised Problem (The Hook) text here\n"
+        "===END_PROBLEM===\n\n"
+        "===SOLVED===\n"
+        "Your revised How I Solved It text here\n"
+        "===END_SOLVED===\n\n"
+        "===DEPLOYED===\n"
+        "Your revised What I Deployed text here\n"
+        "===END_DEPLOYED===\n\n"
+        "===TAKEAWAY===\n"
+        "Your revised Key Takeaway (one sentence) here\n"
+        "===END_TAKEAWAY===\n\n"
+        "Put your commentary about what changed and why OUTSIDE these tags, after all tag blocks. "
+        "Never put commentary inside the tags."
+    )
+
+    action_instructions = {
+        "interview": (
+            "Examine the interview story below carefully. Look for claims that might be "
+            "AI-generated extrapolations: round numbers, vague metrics, inflated team sizes, "
+            "generic outcomes. Ask ONE specific, targeted question to verify or correct the "
+            "most suspicious claim. Be direct but friendly -- like a sharp colleague helping "
+            "them get their story straight before a real interview.\n\n"
+            "Do NOT produce a revised story. Do NOT use any === tags. Just ask your question."
+        ),
+        "chat": (
+            "Continue the conversation naturally. The user may be correcting facts, adding "
+            "context, or asking you to focus on a specific section. Be collaborative.\n\n"
+            "If the user asks you to rewrite or revise the story, use the tag format below."
+            + revision_tag_instructions
+        ),
+        "revise": (
+            "Using everything learned from the conversation, generate a COMPLETE revised "
+            "interview story. Apply all corrections and additional context the user provided. "
+            "Keep the Problem-Solved-Deployed structure. Write in first person, conversational "
+            "tone -- like the candidate riffing with a sharp colleague.\n\n"
+            "You MUST use the tag format below for the revised story."
+            + revision_tag_instructions
+        ),
+    }
+
+    instruction = action_instructions.get(action, "")
+
+    prompt_parts = [story_context]
+
+    if conversation_history:
+        history_lines = []
+        for role, content in conversation_history:
+            if role == "user":
+                history_lines.append(f"User: {content}")
+            else:
+                history_lines.append(f"Assistant: {content}")
+        prompt_parts.append("Previous conversation:\n" + "\n".join(history_lines))
+
+    if instruction:
+        prompt_parts.append(instruction)
+    if custom_message:
+        prompt_parts.append(f"User message: {sanitize_prompt_input(custom_message)}")
+
+    user_prompt = "\n\n".join(prompt_parts)
+
+    try:
+        provider = get_ai_provider()
+        model = get_model_for_tier(model_tier)
+        raw_response = await provider.complete(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return validate_agent_output(raw_response)
+    except Exception as e:
+        safe_error = sanitize_ai_error(e)
+        logger.error("AI provider error for story_interviewer: %s", str(e))
+        return safe_error.message
+
+
+async def generate_propagation_suggestions(
+    db: AsyncSession,
+    story_problem: str,
+    story_solved: str,
+    story_deployed: str,
+    story_takeaway: str | None,
+    story_proof_metric: str | None,
+    original_bullet: str,
+    original_description: str | None,
+) -> dict[str, str]:
+    """Generate updated resume bullet and profile description from revised story facts.
+
+    Returns {"bullet": "...", "description": "..."}.
+    """
+    prompt = (
+        "You are a resume writing specialist. A candidate has fact-checked an interview story "
+        "and corrected inaccuracies. Use the VERIFIED story details below to rewrite:\n\n"
+        "1. A concise resume accomplishment bullet (1-2 lines, action-oriented, "
+        "quantified where data exists)\n"
+        "2. A brief experience description paragraph (3-4 sentences summarizing "
+        "the role's impact)\n\n"
+        f"## Verified Story Details\n\n"
+        f"**Problem:** {story_problem}\n\n"
+        f"**How It Was Solved:** {story_solved}\n\n"
+        f"**What Was Deployed:** {story_deployed}\n\n"
+    )
+    if story_takeaway:
+        prompt += f"**Key Takeaway:** {story_takeaway}\n\n"
+    if story_proof_metric:
+        prompt += f"**Proof Metric:** {story_proof_metric}\n\n"
+
+    prompt += (
+        f"## Original Resume Bullet\n{original_bullet}\n\n"
+    )
+    if original_description:
+        prompt += f"## Original Experience Description\n{original_description}\n\n"
+
+    prompt += (
+        "## Output Format\n\n"
+        "Return EXACTLY this format (no other text):\n\n"
+        "===BULLET===\n"
+        "Your updated resume bullet here\n"
+        "===END_BULLET===\n\n"
+        "===DESCRIPTION===\n"
+        "Your updated experience description here\n"
+        "===END_DESCRIPTION===\n\n"
+        "Rules:\n"
+        "- Use ONLY facts from the verified story — never fabricate\n"
+        "- Keep the candidate's authentic voice\n"
+        "- The bullet should be ATS-friendly and action-oriented\n"
+        "- The description should read as a professional experience paragraph"
+    )
+
+    try:
+        provider = get_ai_provider()
+        model = get_model_for_tier("light")
+        raw = await provider.complete(
+            system_prompt="You are a precise resume writing specialist. Follow the output format exactly.",
+            user_prompt=prompt,
+            model=model,
+            temperature=0.3,
+            max_tokens=1024,
+        )
+
+        result = {"bullet": original_bullet, "description": original_description or ""}
+
+        import re
+        bullet_match = re.search(
+            r"===BULLET===\s*(.+?)\s*===END_BULLET===", raw, re.DOTALL
+        )
+        if bullet_match:
+            result["bullet"] = bullet_match.group(1).strip()
+
+        desc_match = re.search(
+            r"===DESCRIPTION===\s*(.+?)\s*===END_DESCRIPTION===", raw, re.DOTALL
+        )
+        if desc_match:
+            result["description"] = desc_match.group(1).strip()
+
+        return result
+    except Exception as e:
+        logger.error("Propagation suggestion generation failed: %s", e)
+        return {"bullet": original_bullet, "description": original_description or ""}
 
 
 async def generate_agent_response(

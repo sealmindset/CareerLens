@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDate } from "@/lib/utils";
+import { MarkdownContent } from "@/components/markdown-content";
 import type {
   StoryBankStory,
   StoryBankStoryDetail,
   StoryBankStoryVersion,
   StoryBankSummary,
+  StoryAIResponse,
+  PropagateTarget,
+  PropagatePreviewResponse,
+  PropagateApplyResponse,
 } from "@/lib/types";
 import {
   Plus,
@@ -26,6 +31,9 @@ import {
   BookOpen,
   Repeat,
   AlertCircle,
+  Sparkles,
+  Send,
+  ArrowLeft,
 } from "lucide-react";
 
 export default function StoryBankPage() {
@@ -66,6 +74,214 @@ export default function StoryBankPage() {
 
   // Version history
   const [showVersions, setShowVersions] = useState(false);
+
+  // Ask AI modal state
+  const [aiModalStory, setAiModalStory] = useState<StoryBankStoryDetail | null>(null);
+  const [aiHistory, setAiHistory] = useState<{ role: "user" | "ai"; content: string }[]>([]);
+  const [aiMessage, setAiMessage] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiPhase, setAiPhase] = useState<"interview" | "chat" | "compare" | "propagate">("interview");
+  const [revisedStory, setRevisedStory] = useState<{
+    problem: string;
+    solved: string;
+    deployed: string;
+    takeaway: string;
+  } | null>(null);
+  const [editingRevised, setEditingRevised] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Propagate (feedback loop) state
+  const [propagateTargets, setPropagateTargets] = useState<PropagateTarget[]>([]);
+  const [propagateSelected, setPropagateSelected] = useState<Set<string>>(new Set());
+  const [propagateEditing, setPropagateEditing] = useState<Record<string, string>>({});
+  const [propagating, setPropagating] = useState(false);
+
+  // Parse ===TAG=== delimited revision from AI response
+  const parseRevision = (text: string): { fields: { problem: string; solved: string; deployed: string; takeaway: string } | null; commentary: string } => {
+    const sections: Record<string, string> = {};
+    const tagNames = ["PROBLEM", "SOLVED", "DEPLOYED", "TAKEAWAY"];
+    let remaining = text;
+
+    for (const tag of tagNames) {
+      const startTag = `===${tag}===`;
+      const endTag = `===END_${tag}===`;
+      const startIdx = remaining.indexOf(startTag);
+      const endIdx = remaining.indexOf(endTag);
+      if (startIdx !== -1 && endIdx !== -1) {
+        sections[tag.toLowerCase()] = remaining.slice(startIdx + startTag.length, endIdx).trim();
+        remaining = remaining.slice(0, startIdx) + remaining.slice(endIdx + endTag.length);
+      }
+    }
+
+    if (sections.problem && sections.solved && sections.deployed) {
+      return {
+        fields: {
+          problem: sections.problem,
+          solved: sections.solved,
+          deployed: sections.deployed,
+          takeaway: sections.takeaway || "",
+        },
+        commentary: remaining.trim(),
+      };
+    }
+    return { fields: null, commentary: text };
+  };
+
+  // Send AI message
+  const sendAiMessage = async (action: "interview" | "chat" | "revise", message?: string) => {
+    if (!aiModalStory) return;
+    setAiLoading(true);
+
+    const newHistory = message
+      ? [...aiHistory, { role: "user" as const, content: message }]
+      : aiHistory;
+
+    if (message) {
+      setAiHistory(newHistory);
+      setAiMessage("");
+    }
+
+    try {
+      const resp = await apiPost<StoryAIResponse>(
+        `/stories/${aiModalStory.id}/ai-assist`,
+        {
+          action,
+          message: message || null,
+          history: newHistory,
+        }
+      );
+
+      const { fields, commentary } = parseRevision(resp.suggestion);
+
+      if (fields) {
+        setRevisedStory(fields);
+        setAiPhase("compare");
+        if (commentary) {
+          setAiHistory((h) => [...h, { role: "ai", content: commentary }]);
+        }
+      } else {
+        setAiHistory((h) => [...h, { role: "ai", content: resp.suggestion }]);
+        if (action === "interview" && aiHistory.length >= 6) {
+          setAiPhase("chat");
+        }
+      }
+    } catch {
+      setAiHistory((h) => [
+        ...h,
+        { role: "ai", content: "Sorry, something went wrong. Please try again." },
+      ]);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // Open Ask AI modal
+  const openAiModal = async (story: StoryBankStory) => {
+    setLoadingDetail(true);
+    try {
+      const fullStory = await apiGet<StoryBankStoryDetail>(`/stories/${story.id}`);
+      setAiModalStory(fullStory);
+      setAiHistory([]);
+      setAiMessage("");
+      setAiPhase("interview");
+      setRevisedStory(null);
+      setEditingRevised(false);
+      // Auto-start interview
+      setAiLoading(true);
+      try {
+        const resp = await apiPost<StoryAIResponse>(
+          `/stories/${fullStory.id}/ai-assist`,
+          { action: "interview", message: null, history: [] }
+        );
+        setAiHistory([{ role: "ai", content: resp.suggestion }]);
+      } catch {
+        setAiHistory([{ role: "ai", content: "Let me take a look at this story... How about we start — what part of this story feels least accurate to you?" }]);
+      } finally {
+        setAiLoading(false);
+      }
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  // Close Ask AI modal
+  const closeAiModal = () => {
+    setAiModalStory(null);
+    setAiHistory([]);
+    setAiPhase("interview");
+    setRevisedStory(null);
+    setEditingRevised(false);
+    setPropagateTargets([]);
+    setPropagateSelected(new Set());
+    setPropagateEditing({});
+  };
+
+  // Save revised story
+  const saveRevisedStory = async () => {
+    if (!aiModalStory || !revisedStory) return;
+    setSaving(true);
+    try {
+      await apiPut(`/stories/${aiModalStory.id}`, {
+        problem: revisedStory.problem,
+        solved: revisedStory.solved,
+        deployed: revisedStory.deployed,
+        takeaway: revisedStory.takeaway || null,
+        change_summary: "AI-assisted revision via Story Interview",
+      });
+      await loadStories();
+      await loadSummary();
+
+      // Check for propagation targets (feedback loop)
+      try {
+        const preview = await apiPost<PropagatePreviewResponse>(
+          `/stories/${aiModalStory.id}/propagate/preview`
+        );
+        if (preview.targets.length > 0) {
+          setPropagateTargets(preview.targets);
+          setPropagateSelected(new Set(preview.targets.map((t) => t.target_type)));
+          setPropagateEditing({});
+          setAiPhase("propagate");
+          return; // Don't close — show propagate step
+        }
+      } catch {
+        // Propagation preview failed — just close gracefully
+      }
+
+      closeAiModal();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Apply propagation changes
+  const applyPropagation = async () => {
+    if (!aiModalStory || propagateTargets.length === 0) return;
+    setPropagating(true);
+    try {
+      const updates = propagateTargets
+        .filter((t) => propagateSelected.has(t.target_type))
+        .map((t) => ({
+          target_type: t.target_type,
+          entity_id: t.entity_id,
+          new_text: propagateEditing[t.target_type] ?? t.suggested_text,
+        }));
+
+      if (updates.length > 0) {
+        await apiPost<PropagateApplyResponse>(
+          `/stories/${aiModalStory.id}/propagate/apply`,
+          { updates }
+        );
+      }
+      closeAiModal();
+    } finally {
+      setPropagating(false);
+    }
+  };
+
+  // Scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [aiHistory, aiLoading]);
 
   const loadStories = useCallback(async () => {
     try {
@@ -367,6 +583,417 @@ export default function StoryBankPage() {
         </div>
       )}
 
+      {/* Ask AI Modal */}
+      {aiModalStory && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-background">
+          {/* Modal header */}
+          <div className="flex items-center justify-between border-b border-border px-6 py-3">
+            <div className="flex items-center gap-3">
+              <button onClick={closeAiModal} className="rounded-md p-1 hover:bg-accent">
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <Sparkles className="h-5 w-5 text-purple-500" />
+              <div>
+                <h2 className="font-semibold">Story Interview</h2>
+                <p className="text-xs text-muted-foreground">{aiModalStory.story_title}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {aiPhase !== "compare" && aiPhase !== "propagate" && (
+                <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                  {aiPhase === "interview" ? "Guided Interview" : "Free-form Chat"}
+                </span>
+              )}
+              {aiPhase === "propagate" && (
+                <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                  Update Related Records
+                </span>
+              )}
+              <button onClick={closeAiModal} className="rounded-md p-1 hover:bg-accent">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Modal body */}
+          {aiPhase === "propagate" ? (
+            /* -------- PROPAGATE PHASE -------- */
+            <div className="flex-1 overflow-auto">
+              <div className="mx-auto max-w-3xl p-6 space-y-6">
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold">Update Related Records</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Your story corrections can improve your resume variant and profile too.
+                    Review the suggestions below and choose what to apply.
+                  </p>
+                </div>
+
+                {propagateTargets.map((target) => (
+                  <div
+                    key={target.target_type}
+                    className={`rounded-lg border p-4 space-y-3 ${
+                      propagateSelected.has(target.target_type)
+                        ? "border-purple-300 dark:border-purple-700 bg-purple-50/30 dark:bg-purple-900/10"
+                        : "border-border opacity-60"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={propagateSelected.has(target.target_type)}
+                          onChange={(e) => {
+                            const next = new Set(propagateSelected);
+                            if (e.target.checked) next.add(target.target_type);
+                            else next.delete(target.target_type);
+                            setPropagateSelected(next);
+                          }}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <span className="font-medium text-sm">
+                          {target.target_type === "variant" ? "Resume Variant" : "Profile Experience"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          — {target.entity_label}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (propagateEditing[target.target_type] !== undefined) {
+                            const next = { ...propagateEditing };
+                            delete next[target.target_type];
+                            setPropagateEditing(next);
+                          } else {
+                            setPropagateEditing({
+                              ...propagateEditing,
+                              [target.target_type]: target.suggested_text,
+                            });
+                          }
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        {propagateEditing[target.target_type] !== undefined ? "Done Editing" : "Edit"}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Current</p>
+                        <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">
+                          {target.original_text.length > 300
+                            ? target.original_text.slice(0, 300) + "..."
+                            : target.original_text}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-1">Suggested</p>
+                        {propagateEditing[target.target_type] !== undefined ? (
+                          <textarea
+                            value={propagateEditing[target.target_type]}
+                            onChange={(e) =>
+                              setPropagateEditing({
+                                ...propagateEditing,
+                                [target.target_type]: e.target.value,
+                              })
+                            }
+                            rows={5}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        ) : (
+                          <p className="text-sm whitespace-pre-wrap bg-purple-50/50 dark:bg-purple-900/20 rounded p-2">
+                            {target.suggested_text.length > 300
+                              ? target.suggested_text.slice(0, 300) + "..."
+                              : target.suggested_text}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <button
+                    onClick={closeAiModal}
+                    className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
+                  >
+                    Skip
+                  </button>
+                  <button
+                    onClick={applyPropagation}
+                    disabled={propagating || propagateSelected.size === 0}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    {propagating ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    Apply {propagateSelected.size} Update{propagateSelected.size !== 1 ? "s" : ""}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : aiPhase === "compare" && revisedStory ? (
+            /* -------- COMPARE PHASE -------- */
+            <div className="flex-1 overflow-auto">
+              <div className="mx-auto max-w-6xl p-6">
+                <div className="mb-4 text-center">
+                  <h3 className="text-lg font-semibold">Compare & Choose</h3>
+                  <p className="text-sm text-muted-foreground">Review the AI revision against your original story</p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Original */}
+                  <div className="rounded-lg border border-border p-4 space-y-3">
+                    <h4 className="text-center font-semibold text-muted-foreground">Original</h4>
+                    <div>
+                      <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1">THE PROBLEM</p>
+                      <p className="text-sm whitespace-pre-wrap">{aiModalStory.problem}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">HOW I SOLVED IT</p>
+                      <p className="text-sm whitespace-pre-wrap">{aiModalStory.solved}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1">WHAT I DEPLOYED</p>
+                      <p className="text-sm whitespace-pre-wrap">{aiModalStory.deployed}</p>
+                    </div>
+                    {aiModalStory.takeaway && (
+                      <div>
+                        <p className="text-xs font-semibold mb-1">KEY TAKEAWAY</p>
+                        <p className="text-sm italic">{aiModalStory.takeaway}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Revised */}
+                  <div className="rounded-lg border-2 border-purple-300 dark:border-purple-700 bg-purple-50/30 dark:bg-purple-900/10 p-4 space-y-3">
+                    <h4 className="text-center font-semibold text-purple-600 dark:text-purple-400">AI Revised</h4>
+                    {editingRevised ? (
+                      <>
+                        <div>
+                          <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1">THE PROBLEM</p>
+                          <textarea
+                            value={revisedStory.problem}
+                            onChange={(e) => setRevisedStory({ ...revisedStory, problem: e.target.value })}
+                            rows={4}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">HOW I SOLVED IT</p>
+                          <textarea
+                            value={revisedStory.solved}
+                            onChange={(e) => setRevisedStory({ ...revisedStory, solved: e.target.value })}
+                            rows={5}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1">WHAT I DEPLOYED</p>
+                          <textarea
+                            value={revisedStory.deployed}
+                            onChange={(e) => setRevisedStory({ ...revisedStory, deployed: e.target.value })}
+                            rows={4}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold mb-1">KEY TAKEAWAY</p>
+                          <input
+                            value={revisedStory.takeaway}
+                            onChange={(e) => setRevisedStory({ ...revisedStory, takeaway: e.target.value })}
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1">THE PROBLEM</p>
+                          <p className="text-sm whitespace-pre-wrap">{revisedStory.problem}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">HOW I SOLVED IT</p>
+                          <p className="text-sm whitespace-pre-wrap">{revisedStory.solved}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1">WHAT I DEPLOYED</p>
+                          <p className="text-sm whitespace-pre-wrap">{revisedStory.deployed}</p>
+                        </div>
+                        {revisedStory.takeaway && (
+                          <div>
+                            <p className="text-xs font-semibold mb-1">KEY TAKEAWAY</p>
+                            <p className="text-sm italic">{revisedStory.takeaway}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Compare actions */}
+                <div className="mt-6 flex items-center justify-center gap-3">
+                  <button
+                    onClick={closeAiModal}
+                    className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
+                  >
+                    Keep Original
+                  </button>
+                  <button
+                    onClick={() => { setAiPhase("chat"); setRevisedStory(null); setEditingRevised(false); }}
+                    className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
+                  >
+                    Back to Chat
+                  </button>
+                  {!editingRevised ? (
+                    <button
+                      onClick={() => setEditingRevised(true)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-purple-300 dark:border-purple-700 px-4 py-2 text-sm text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit Revised
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setEditingRevised(false)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Done Editing
+                    </button>
+                  )}
+                  <button
+                    onClick={saveRevisedStory}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    Use Revised
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* -------- INTERVIEW / CHAT PHASE -------- */
+            <div className="flex flex-1 overflow-hidden">
+              {/* Left: Current story reference */}
+              <div className="hidden lg:block w-[380px] shrink-0 border-r border-border overflow-y-auto p-5">
+                <h3 className="font-semibold text-sm text-muted-foreground mb-3">Current Story</h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1">THE PROBLEM (The Hook)</p>
+                    <p className="text-sm whitespace-pre-wrap">{aiModalStory.problem}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">HOW I SOLVED IT</p>
+                    <p className="text-sm whitespace-pre-wrap">{aiModalStory.solved}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1">WHAT I DEPLOYED</p>
+                    <p className="text-sm whitespace-pre-wrap">{aiModalStory.deployed}</p>
+                  </div>
+                  {aiModalStory.takeaway && (
+                    <div>
+                      <p className="text-xs font-semibold mb-1">Key Takeaway</p>
+                      <p className="text-sm italic">{aiModalStory.takeaway}</p>
+                    </div>
+                  )}
+                  {aiModalStory.hook_line && (
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <p className="text-xs font-medium text-muted-foreground mb-0.5">Quick Hook</p>
+                      <p className="text-sm">{aiModalStory.hook_line}</p>
+                    </div>
+                  )}
+                  {(aiModalStory.source_title || aiModalStory.source_company) && (
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <p className="text-xs text-muted-foreground">
+                        {aiModalStory.source_title}{aiModalStory.source_title && aiModalStory.source_company ? " at " : ""}{aiModalStory.source_company}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Chat panel */}
+              <div className="flex flex-1 flex-col">
+                {/* Chat messages */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {aiHistory.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={`max-w-[80%] rounded-lg px-4 py-2.5 text-sm ${
+                          msg.role === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted"
+                        }`}
+                      >
+                        {msg.role === "ai" ? (
+                          <MarkdownContent content={msg.content} />
+                        ) : (
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {aiLoading && (
+                    <div className="flex justify-start">
+                      <div className="rounded-lg bg-muted px-4 py-2.5">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* Quick actions + input */}
+                <div className="border-t border-border p-4">
+                  {aiHistory.length > 0 && aiPhase !== "compare" && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => sendAiMessage("revise")}
+                        disabled={aiLoading}
+                        className="inline-flex items-center gap-1 rounded-full border border-purple-300 dark:border-purple-700 px-3 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 disabled:opacity-50"
+                      >
+                        <Sparkles className="h-3 w-3" /> Generate Revised Story
+                      </button>
+                    </div>
+                  )}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!aiMessage.trim() || aiLoading) return;
+                      const action = aiPhase === "interview" ? "interview" : "chat";
+                      sendAiMessage(action, aiMessage.trim());
+                    }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      value={aiMessage}
+                      onChange={(e) => setAiMessage(e.target.value)}
+                      placeholder={
+                        aiPhase === "interview"
+                          ? "Answer the question..."
+                          : "Chat about your story..."
+                      }
+                      disabled={aiLoading}
+                      className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+                    />
+                    <button
+                      type="submit"
+                      disabled={aiLoading || !aiMessage.trim()}
+                      className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      <Send className="h-4 w-4" />
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Story cards */}
       <div className="space-y-3">
         {stories.map((story) => (
@@ -477,6 +1104,12 @@ export default function StoryBankPage() {
                             className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent"
                           >
                             <Pencil className="h-3.5 w-3.5" /> Edit
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openAiModal(story); }}
+                            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-sm text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" /> Ask AI
                           </button>
                           {story.status === "active" ? (
                             <button

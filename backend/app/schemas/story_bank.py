@@ -89,3 +89,50 @@ class StoryBankSummary(BaseModel):
     archived_count: int
     unique_companies: int
     most_recent_update: datetime | None
+
+
+# --- Story AI Assist ---
+class StoryConversationMessage(BaseModel):
+    role: str  # "user" or "ai"
+    content: str
+
+
+class StoryAIRequest(BaseModel):
+    action: str  # "interview", "chat", or "revise"
+    message: str | None = None
+    history: list[StoryConversationMessage] = []
+
+
+class StoryAIResponse(BaseModel):
+    suggestion: str
+
+
+# --- Propagation (feedback loop) ---
+class PropagateTarget(BaseModel):
+    target_type: str           # "variant" or "profile"
+    original_text: str
+    suggested_text: str
+    entity_id: str             # variant_id or profile_experience_id
+    entity_label: str          # e.g. "Senior Engineer at Acme Corp"
+
+
+class PropagatePreviewResponse(BaseModel):
+    targets: list[PropagateTarget]
+    story_id: str
+
+
+class PropagateApplyItem(BaseModel):
+    target_type: str           # "variant" or "profile"
+    entity_id: str
+    new_text: str              # user-approved (possibly edited) text
+
+
+class PropagateApplyRequest(BaseModel):
+    updates: list[PropagateApplyItem]
+
+
+class PropagateApplyResponse(BaseModel):
+    variant_updated: bool = False
+    profile_updated: bool = False
+    variant_change_summary: str | None = None
+    profile_change_summary: str | None = None

@@ -14,10 +14,13 @@ import json
 import logging
 import re
 
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.resume_variant import ResumeVariant
+from app.models.story_bank import StoryBankStory
 from app.models.workspace import WorkspaceArtifact
 from app.services.agents.base import AgentContext, call_agent_ai
 from app.services.workspace_service import save_artifact
@@ -79,6 +82,80 @@ def _format_variant_context(variant: ResumeVariant) -> str:
     return "\n".join(parts)
 
 
+MAX_STORY_CONTEXT_ENTRIES = 8
+
+
+async def _load_story_bank_for_variant(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    variant: ResumeVariant,
+) -> str:
+    """Load Story Bank stories matching the variant's experiences.
+
+    Returns compact markdown context with verified facts from fact-checked
+    stories. Injected into the tailor prompt so the AI writes more authentic,
+    accurate accomplishment bullets.
+    """
+    result = await db.execute(
+        select(StoryBankStory).where(
+            StoryBankStory.user_id == user_id,
+            StoryBankStory.status == "active",
+        )
+    )
+    stories = list(result.scalars().all())
+    if not stories or not variant.experiences:
+        return ""
+
+    # Build a company+title index from variant experiences
+    exp_keys: set[tuple[str, str]] = set()
+    for exp in variant.experiences:
+        company = (exp.get("company") or "").strip().lower()
+        title = (exp.get("title") or "").strip().lower()
+        if company:
+            exp_keys.add((company, title))
+
+    # Match stories to variant experiences
+    matched: list[StoryBankStory] = []
+    for story in stories:
+        s_company = (story.source_company or "").strip().lower()
+        s_title = (story.source_title or "").strip().lower()
+        if not s_company:
+            continue
+        for exp_company, exp_title in exp_keys:
+            if s_company in exp_company or exp_company in s_company:
+                if not exp_title or not s_title or s_title in exp_title or exp_title in s_title:
+                    matched.append(story)
+                    break
+        if len(matched) >= MAX_STORY_CONTEXT_ENTRIES:
+            break
+
+    if not matched:
+        return ""
+
+    parts = [
+        "## Verified Interview Stories (from Story Bank)\n",
+        "The following stories have been fact-checked with the candidate. When writing "
+        "accomplishment bullets for these experiences, use the VERIFIED facts below "
+        "rather than inferring from the resume text.\n",
+    ]
+
+    for story in matched:
+        role_label = f"{story.source_title or 'Role'} at {story.source_company or 'Company'}"
+        parts.append(f"**{role_label}** — \"{story.story_title}\"")
+        if story.hook_line:
+            parts.append(f"  Hook: {story.hook_line}")
+        if story.proof_metric:
+            parts.append(f"  Proof: {story.proof_metric}")
+        # Include a condensed fact summary from the deployed section (most factual)
+        deployed_preview = story.deployed[:200]
+        if len(story.deployed) > 200:
+            deployed_preview += "..."
+        parts.append(f"  Key result: {deployed_preview}")
+        parts.append("")
+
+    return "\n".join(parts)
+
+
 async def _get_matched_variant(
     db: AsyncSession, context: AgentContext
 ) -> ResumeVariant | None:
@@ -133,6 +210,7 @@ async def run_tailor_task(context: AgentContext) -> list[WorkspaceArtifact]:
     # Try to get a matched resume variant
     variant = await _get_matched_variant(context.db, context)
     variant_context = ""
+    story_context = ""
     if variant:
         variant_context = (
             f"\n\n{_format_variant_context(variant)}\n\n"
@@ -141,10 +219,15 @@ async def run_tailor_task(context: AgentContext) -> list[WorkspaceArtifact]:
             f"Base your tailored resume on this variant's content, framing, and emphasis -- "
             f"do not fall back to the generic profile unless the variant is missing information."
         )
+        # Load fact-checked story context for authenticity
+        story_context = await _load_story_bank_for_variant(
+            context.db, context.user_id, variant
+        )
 
     # Task 1: Tailored Resume
     resume_prompt = f"""Rewrite the candidate's resume specifically tailored for this job listing.
 {variant_context}
+{story_context}
 
 CRITICAL: The output must be a CLEAN, SUBMISSION-READY resume that can be sent directly to
 an employer or parsed by an ATS. Do NOT include any commentary, rationale, analysis, notes,

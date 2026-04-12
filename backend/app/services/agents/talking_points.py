@@ -23,6 +23,7 @@ from app.models.resume_variant import ResumeVariant
 from app.models.story_bank import StoryBankStory
 from app.models.workspace import WorkspaceArtifact
 from app.services.agents.base import AgentContext, call_agent_ai
+from app.services.text_matching import normalize, word_overlap_ratio, MATCH_THRESHOLD
 from app.services.workspace_service import save_artifact
 
 logger = logging.getLogger(__name__)
@@ -107,25 +108,6 @@ def _format_variants_as_source_material(variants: list[ResumeVariant]) -> str:
 # Story Bank helpers
 # ---------------------------------------------------------------------------
 
-def _normalize(text: str) -> set[str]:
-    """Normalize text to a set of lowercase words for comparison."""
-    return set(re.findall(r"[a-z0-9]+", text.lower()))
-
-
-def _word_overlap_ratio(a: str, b: str) -> float:
-    """Compute word overlap ratio between two strings (Jaccard-like)."""
-    words_a = _normalize(a)
-    words_b = _normalize(b)
-    if not words_a or not words_b:
-        return 0.0
-    intersection = words_a & words_b
-    union = words_a | words_b
-    return len(intersection) / len(union)
-
-
-MATCH_THRESHOLD = 0.55
-
-
 def _match_bullet_to_story(
     bullet: str, stories: list[StoryBankStory]
 ) -> StoryBankStory | None:
@@ -134,7 +116,7 @@ def _match_bullet_to_story(
     best_score = 0.0
 
     for story in stories:
-        score = _word_overlap_ratio(bullet, story.source_bullet)
+        score = word_overlap_ratio(bullet, story.source_bullet)
         if score > best_score:
             best_score = score
             best_match = story
@@ -364,6 +346,17 @@ async def run_talking_points_task(
     variants = await _load_all_variants(context.db, context.user_id)
     variant_context = _format_variants_as_source_material(variants)
 
+    # Resolve the active variant for story bank linkage
+    active_variant_id: uuid.UUID | None = getattr(
+        context.application, "resume_variant_id", None
+    )
+    if not active_variant_id:
+        # Fallback: use the default variant
+        for v in variants:
+            if v.is_default:
+                active_variant_id = v.id
+                break
+
     # Load existing stories from the bank
     banked_stories = await _load_story_bank(context.db, context.user_id)
 
@@ -574,6 +567,7 @@ Format as clean markdown."""
                 parsed_stories=parsed_stories,
                 cheatsheet_entries=new_cheatsheet,
                 bullets=new_bullets,
+                variant_id=active_variant_id,
             )
             logger.info("Saved %d new stories to Story Bank", len(parsed_stories))
 
