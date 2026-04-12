@@ -186,6 +186,9 @@ export default function AgentsPage() {
   const [copiedScript, setCopiedScript] = useState(false);
   const [expandedHistoryKeys, setExpandedHistoryKeys] = useState<Set<string>>(new Set());
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const artifactViewerRef = useRef<HTMLDivElement>(null);
 
   // Auto-Fill modal state
   const [showAutoFillModal, setShowAutoFillModal] = useState(false);
@@ -206,6 +209,30 @@ export default function AgentsPage() {
   const [activeQuestionIdx, setActiveQuestionIdx] = useState(0);
   const [editingAnswer, setEditingAnswer] = useState("");
   const [chatbotSubmitResult, setChatbotSubmitResult] = useState<ChatbotSubmitResult | null>(null);
+
+  // Scroll to artifact viewer when an artifact is selected; clear any prior download error
+  useEffect(() => {
+    setDownloadError(null);
+    if (selectedArtifact && artifactViewerRef.current) {
+      artifactViewerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [selectedArtifact]);
+
+  const handleDownload = async (format: "pdf" | "docx") => {
+    if (!workspace || !selectedArtifact) return;
+    setDownloadError(null);
+    setDownloading(format);
+    try {
+      await apiDownload(
+        `/agents/workspaces/${workspace.id}/artifacts/${selectedArtifact.id}/export?format=${format}`,
+        `${selectedArtifact.title.replace(/\s+/g, "_")}.${format}`,
+      );
+    } catch {
+      setDownloadError(`Failed to download as ${format.toUpperCase()}. Please try again.`);
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   const toggleHistory = (key: string) => {
     setExpandedHistoryKeys((prev) => {
@@ -1021,6 +1048,7 @@ export default function AgentsPage() {
             {/* Artifact viewer */}
             {selectedArtifact && (
               <div
+                ref={artifactViewerRef}
                 className="rounded-xl border p-6"
                 style={{
                   backgroundColor: "var(--card)",
@@ -1074,31 +1102,23 @@ export default function AgentsPage() {
                     {workspace && (
                       <>
                         <button
-                          onClick={() =>
-                            apiDownload(
-                              `/agents/workspaces/${workspace.id}/artifacts/${selectedArtifact.id}/export?format=docx`,
-                              `${selectedArtifact.title.replace(/\s+/g, "_")}.docx`,
-                            )
-                          }
-                          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+                          onClick={() => handleDownload("docx")}
+                          disabled={downloading === "docx"}
+                          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
                           style={{ borderColor: "var(--border)" }}
                           title="Download as Word document"
                         >
-                          <Download className="h-3 w-3" />
+                          {downloading === "docx" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
                           DOCX
                         </button>
                         <button
-                          onClick={() =>
-                            apiDownload(
-                              `/agents/workspaces/${workspace.id}/artifacts/${selectedArtifact.id}/export?format=pdf`,
-                              `${selectedArtifact.title.replace(/\s+/g, "_")}.pdf`,
-                            )
-                          }
-                          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+                          onClick={() => handleDownload("pdf")}
+                          disabled={downloading === "pdf"}
+                          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
                           style={{ borderColor: "var(--border)" }}
                           title="Download as PDF"
                         >
-                          <Download className="h-3 w-3" />
+                          {downloading === "pdf" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
                           PDF
                         </button>
                       </>
@@ -1133,6 +1153,9 @@ export default function AgentsPage() {
                     </button>
                   </div>
                 </div>
+                {downloadError && (
+                  <p className="text-xs text-red-500 mt-1">{downloadError}</p>
+                )}
                 <div
                   className="prose prose-sm max-w-none rounded-lg border p-4 overflow-auto max-h-[60vh]"
                   style={{

@@ -6,7 +6,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright Chromium and its system dependencies
-RUN playwright install --with-deps chromium
+# Skip TLS verification for corporate proxy environments
+RUN NODE_TLS_REJECT_UNAUTHORIZED=0 playwright install --with-deps chromium
 
 COPY . .
 

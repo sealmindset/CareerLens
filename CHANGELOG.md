@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.14.1] - 2026-04-11
+
+### Fixed
+- **Application Studio**: Artifact viewer now auto-scrolls into view when selecting an analysis result, so results are no longer hidden off-screen
+- **Application Studio**: Download buttons (PDF/DOCX) now show a loading spinner during download and display an error message on failure instead of silently failing
+
 ## [0.14.0] - 2026-04-09
 
 ### Added
