@@ -94,6 +94,14 @@ const agents: AgentDef[] = [
     color: "rgb(16,185,129)",
   },
   {
+    name: "Talking Points",
+    key: "talking_points",
+    icon: MessageSquare,
+    description: "Creates compelling interview stories for each bullet point in your tailored resume.",
+    modelTier: "premium",
+    color: "rgb(168,85,247)",
+  },
+  {
     name: "Strategist",
     key: "strategist",
     icon: Target,

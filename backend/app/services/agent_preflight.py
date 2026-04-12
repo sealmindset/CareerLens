@@ -153,6 +153,12 @@ AGENT_REQUIREMENTS = {
         "description": "Prepares you for interviews with practice questions and feedback",
         "required": ["profile_basic", "job_listing"],
         "optional": ["job_match_analysis", "skill_gap_report"],
+        "next_agent": "talking_points",
+    },
+    "talking_points": {
+        "description": "Creates compelling interview stories for each resume bullet point",
+        "required": ["profile_basic", "job_listing"],
+        "optional": ["tailored_resume"],
         "next_agent": "strategist",
     },
     "strategist": {
@@ -300,6 +306,8 @@ def _artifact_to_agent(artifact_type: str) -> str:
         "culture_analysis": "brand_advisor",
         "application_checklist": "coordinator",
         "follow_up_plan": "coordinator",
+        "interview_stories": "talking_points",
+        "story_cheatsheet": "talking_points",
         "form_fill_plan": "auto_fill",
         "form_fill_script": "auto_fill",
         "chatbot_transcript": "auto_fill",

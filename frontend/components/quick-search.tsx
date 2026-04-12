@@ -40,6 +40,12 @@ const navigationItems: SearchItem[] = [
     permission: { resource: "agents", action: "view" },
   },
   {
+    label: "Story Bank",
+    href: "/stories",
+    keywords: ["stories", "interview", "talking points", "problem", "solved", "deployed", "bank", "reuse"],
+    permission: { resource: "stories", action: "view" },
+  },
+  {
     label: "User Management",
     href: "/admin/users",
     keywords: ["users", "admin", "people"],

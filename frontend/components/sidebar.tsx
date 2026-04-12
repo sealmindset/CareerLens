@@ -14,6 +14,7 @@ import {
   FileText,
   FileStack,
   Bot,
+  BookOpen,
   UserCircle,
   MessageSquareCode,
   SlidersHorizontal,
@@ -57,6 +58,12 @@ const mainNavItems: NavItem[] = [
     href: "/agents",
     icon: Bot,
     permission: { resource: "agents", action: "view" },
+  },
+  {
+    label: "Story Bank",
+    href: "/stories",
+    icon: BookOpen,
+    permission: { resource: "stories", action: "view" },
   },
 ];
 

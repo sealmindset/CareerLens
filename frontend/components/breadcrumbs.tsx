@@ -11,6 +11,7 @@ const segmentLabels: Record<string, string> = {
   resumes: "Resumes",
   jobs: "Job Listings",
   agents: "Application Studio",
+  stories: "Story Bank",
   settings: "Settings",
   admin: "Admin",
   users: "Users",

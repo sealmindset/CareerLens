@@ -440,6 +440,57 @@ export interface VariantStatsResponse {
   unlinked_applications: number;
 }
 
+// Story Bank types
+export interface StoryBankStory {
+  id: string;
+  user_id: string;
+  source_bullet: string;
+  source_variant_id: string | null;
+  source_company: string | null;
+  source_title: string | null;
+  story_title: string;
+  problem: string;
+  solved: string;
+  deployed: string;
+  takeaway: string | null;
+  hook_line: string | null;
+  trigger_keywords: string[] | null;
+  proof_metric: string | null;
+  status: string;
+  times_used: number;
+  current_version: number;
+  created_at: string;
+  updated_at: string;
+  version_count: number;
+}
+
+export interface StoryBankStoryVersion {
+  id: string;
+  story_id: string;
+  version_number: number;
+  problem: string | null;
+  solved: string | null;
+  deployed: string | null;
+  takeaway: string | null;
+  hook_line: string | null;
+  trigger_keywords: string[] | null;
+  proof_metric: string | null;
+  change_summary: string | null;
+  created_at: string;
+}
+
+export interface StoryBankStoryDetail extends StoryBankStory {
+  versions: StoryBankStoryVersion[];
+}
+
+export interface StoryBankSummary {
+  total_count: number;
+  active_count: number;
+  archived_count: number;
+  unique_companies: number;
+  most_recent_update: string | null;
+}
+
 // Chatbot simulation types (Auto-Fill modal, chatbot mode)
 export interface DetectedMethodResult {
   method: string;

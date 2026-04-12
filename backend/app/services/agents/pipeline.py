@@ -2,8 +2,8 @@
 
 Runs agents in sequence, each building on the previous agent's output.
 Two pipeline types:
-- "full": Scout → Tailor → Coach → Strategist → Brand Advisor → Coordinator
-- "quick": Scout → Tailor → Strategist (essentials only)
+- "full": Scout → Tailor → Coach → Talking Points → Strategist → Brand Advisor → Coordinator
+- "quick": Scout → Tailor → Talking Points → Strategist (essentials only)
 """
 
 import json
@@ -24,8 +24,8 @@ from app.services.workspace_service import (
 logger = logging.getLogger(__name__)
 
 PIPELINE_SEQUENCES = {
-    "full": ["scout", "tailor", "coach", "strategist", "brand_advisor", "coordinator"],
-    "quick": ["scout", "tailor", "strategist"],
+    "full": ["scout", "tailor", "coach", "talking_points", "strategist", "brand_advisor", "coordinator"],
+    "quick": ["scout", "tailor", "talking_points", "strategist"],
 }
 
 
