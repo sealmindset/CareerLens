@@ -1,0 +1,79 @@
+# Colang Rail Definitions for CareerLens
+# Defines dialog rails, topic boundaries, and safety constraints.
+
+# --- Input Rails ---
+
+define flow check jailbreak
+  """Block jailbreak and prompt injection attempts."""
+  user ...
+  if user said "ignore previous instructions"
+    or user said "you are now in developer mode"
+    or user said "override safety"
+    or user said "DAN mode"
+    or user said "pretend you are"
+    or user said "act as root"
+    bot refuse jailbreak
+
+define flow check input safety
+  """Block dangerous input patterns."""
+  user ...
+  if user message contains "<script"
+    or user message contains "javascript:"
+    or user message contains "onerror="
+    or user message contains "onclick="
+    or user message contains "&#"
+    or user message contains "constructor.__proto__"
+    bot refuse unsafe input
+
+define flow check topic boundary
+  """Keep conversation within career domain."""
+  user ...
+  if not user asking about career
+    and not user asking about resume
+    and not user asking about job
+    and not user asking about interview
+    and not user asking about application
+    and not user asking about skills
+    and not user asking about company
+    and not user asking about salary
+    bot redirect to career domain
+
+# --- Output Rails ---
+
+define flow check output safety
+  """Sanitize output for injection vectors."""
+  bot ...
+  if bot message contains "<script"
+    or bot message contains "javascript:"
+    or bot message contains "onerror="
+    bot sanitize output
+
+define flow check pii leakage
+  """Prevent system from leaking PII not in context."""
+  bot ...
+  if bot message contains social security
+    or bot message contains credit card
+    or bot message contains password
+    bot redact pii
+
+define flow check content policy
+  """Enforce content policy on outputs."""
+  bot ...
+  if bot message is harmful
+    or bot message is discriminatory
+    or bot message fabricates data
+    bot refuse harmful content
+
+# --- Bot responses ---
+
+define bot refuse jailbreak
+  "I can't process that request. I'm designed to help with career-related tasks only. How can I assist you with your job search?"
+
+define bot refuse unsafe input
+  "I've detected potentially unsafe content in your message. Please rephrase your request."
+
+define bot redirect to career domain
+  "I'm specialized in career assistance -- resume tailoring, interview prep, job matching, and application strategy. How can I help you with your career?"
+
+define bot refuse harmful content
+  "I can't provide that type of content. Let me help you with something career-related instead."

@@ -594,6 +594,32 @@ export interface NotificationCountResponse {
   unread_count: number;
 }
 
+// AI Safety Testing types
+export interface SafetyTestResult {
+  id: string;
+  category: string;
+  severity: string;
+  title: string;
+  description: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface CategorySummary {
+  total: number;
+  passed: number;
+  failed: number;
+}
+
+export interface SafetyReport {
+  total_tests: number;
+  passed: number;
+  failed: number;
+  score: number;
+  results: SafetyTestResult[];
+  summary_by_category: Record<string, CategorySummary>;
+}
+
 // Chatbot simulation types (Auto-Fill modal, chatbot mode)
 export interface DetectedMethodResult {
   method: string;

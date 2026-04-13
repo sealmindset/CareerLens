@@ -13,6 +13,7 @@ BLOCKED_PATTERNS = [
     (r"on(?:error|load|click)\s*=", "Event handler injection"),
     (r"&#\d+;", "HTML entity encoding (potential payload)"),
     (r"SAFETY\s*(?:PREAMBLE|INSTRUCTIONS)", "Safety preamble tampering"),
+    (r"\{\{.*(?:constructor|__proto__|prototype).*\}\}", "Prototype pollution attempt"),
 ]
 
 # Patterns that produce WARNINGS (non-blocking, logged)

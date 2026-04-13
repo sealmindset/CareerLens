@@ -3,11 +3,13 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
+from app.middleware.permissions import require_permission
 from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.auth import UserInfo
@@ -24,6 +26,7 @@ from app.services.notification_service import (
     mark_notifications_read,
     with_unread_filter,
 )
+from app.services.follow_up_scheduler import check_follow_ups
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -117,3 +120,20 @@ async def mark_read(
         db, user_id, notification_ids=ids, mark_all=body.mark_all_read
     )
     return NotificationMarkReadResponse(updated=updated)
+
+
+class FollowUpCheckResponse(BaseModel):
+    reminders_created: int
+
+
+@router.post(
+    "/follow-up-check",
+    response_model=FollowUpCheckResponse,
+    dependencies=[Depends(require_permission("app_settings", "edit"))],
+)
+async def trigger_follow_up_check(
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually trigger follow-up reminder check (admin only)."""
+    created = await check_follow_ups(db)
+    return FollowUpCheckResponse(reminders_created=created)

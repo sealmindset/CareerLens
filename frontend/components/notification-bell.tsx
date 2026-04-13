@@ -5,6 +5,7 @@ import {
   Bell,
   BellOff,
   CheckCheck,
+  Clock,
   ExternalLink,
   GitPullRequest,
   AlertTriangle,
@@ -86,6 +87,13 @@ const typeConfigMap: Record<string, TypeConfig> = {
     textColor: "text-orange-700 dark:text-orange-400",
     icon: AlertTriangle,
     label: "Action",
+  },
+  FOLLOW_UP_DUE: {
+    borderColor: "border-l-amber-500",
+    bgColor: "bg-amber-50 dark:bg-amber-950/30",
+    textColor: "text-amber-700 dark:text-amber-400",
+    icon: Clock,
+    label: "Follow-up",
   },
   SYSTEM: {
     borderColor: "border-l-gray-400",

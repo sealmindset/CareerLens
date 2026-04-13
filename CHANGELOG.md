@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.17.1] - 2026-04-13
+
+### Added
+- **NeMo Guardrails AI Safety Testing Suite**: Comprehensive adversarial test framework with 35 tests across 6 categories
+- NeMo Guardrails configuration with Colang rail definitions for career-domain safety
+- `GET /api/admin/ai-safety/test` endpoint running full safety suite
+- 6 test categories: Input Rails (jailbreak/injection), Output Rails (XSS/sanitization), Topic Rails (domain boundary), Dialog Rails (multi-turn manipulation), Content Rails (PII/fabrication), Encoding Rails (bypass techniques)
+- AI Safety admin page with score card, collapsible category breakdowns, severity badges, and re-run button
+- Sidebar "AI Safety" link under admin section (uses app_settings.view permission)
+- 13 pytest tests: 10 unit tests (suite integrity, critical pass rate, category coverage, score threshold) + 3 API tests (auth, permissions, response shape)
+- NeMo Guardrails Colang rail definitions and config.yml for future runtime integration
+
+## [0.17.0] - 2026-04-13
+
+### Added
+- **Application Follow-Up Reminders**: Automated notification system for application follow-up dates
+- Background scheduler running daily to check for due/overdue follow-up dates
+- `FOLLOW_UP_DUE` notification type with deduplication (one reminder per follow-up date)
+- `POST /api/notifications/follow-up-check` admin endpoint for manual trigger
+- Notification bell displays follow-up reminders with amber clock icon and urgency messaging
+- Smart filtering: only notifies for active statuses (submitted, interviewing, ready_to_review)
+- 4 backend tests for follow-up check endpoint (auth, permissions, response shape, idempotency)
+
 ## [0.16.5] - 2026-04-12
 
 ### Added

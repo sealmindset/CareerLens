@@ -20,6 +20,7 @@ import {
   SlidersHorizontal,
   BarChart3,
   ShieldCheck,
+  FlaskConical,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -104,6 +105,12 @@ const adminNavItems: NavItem[] = [
     label: "Security",
     href: "/admin/security",
     icon: ShieldCheck,
+    permission: { resource: "app_settings", action: "view" },
+  },
+  {
+    label: "AI Safety",
+    href: "/admin/ai-safety",
+    icon: FlaskConical,
     permission: { resource: "app_settings", action: "view" },
   },
 ];
