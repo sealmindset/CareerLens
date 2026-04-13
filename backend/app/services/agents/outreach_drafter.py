@@ -37,7 +37,7 @@ def _get_ninety_day_plan(context: AgentContext) -> str:
 
 def _get_tailored_resume(context: AgentContext) -> str:
     """Pull the best available resume from workspace artifacts."""
-    for art_type in ("amplified_resume", "ageism_scrubbed_resume", "tailored_resume"):
+    for art_type in ("amplified_resume", "right_sized_resume", "ageism_scrubbed_resume", "tailored_resume"):
         for art in context.workspace_artifacts:
             if art.artifact_type == art_type:
                 return art.content

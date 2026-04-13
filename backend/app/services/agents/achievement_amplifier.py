@@ -65,8 +65,8 @@ def _format_story_bank_context(stories: list[StoryBankStory]) -> str:
 
 
 def _get_best_resume_content(context: AgentContext) -> str:
-    """Get the best available resume: ageism_scrubbed > tailored."""
-    for artifact_type in ("ageism_scrubbed_resume", "tailored_resume"):
+    """Get the best available resume: right_sized > ageism_scrubbed > tailored."""
+    for artifact_type in ("right_sized_resume", "ageism_scrubbed_resume", "tailored_resume"):
         for artifact in context.workspace_artifacts:
             if artifact.artifact_type == artifact_type:
                 return artifact.content

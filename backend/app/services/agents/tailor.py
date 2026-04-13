@@ -24,6 +24,7 @@ from app.models.story_bank import StoryBankStory
 from app.models.workspace import WorkspaceArtifact
 from app.services.agents.base import AgentContext, call_agent_ai
 from app.services.agents.ageism_shield import run_ageism_shield
+from app.services.agents.overqualification_shield import run_overqualification_shield
 from app.services.workspace_service import save_artifact
 
 logger = logging.getLogger(__name__)
@@ -398,5 +399,20 @@ Return your evaluation as a JSON object (no markdown fencing):
             artifacts.extend(shield_artifacts)
         except Exception as e:
             logger.warning("Ageism Shield failed: %s", e)
+
+    # Overqualification Shield post-pass (when enabled)
+    if context.overqualification_shield:
+        try:
+            # Chain: use ageism-scrubbed resume if available, otherwise original
+            base_resume = resume_response
+            if context.ageism_shield:
+                for art in artifacts:
+                    if art.artifact_type == "ageism_scrubbed_resume":
+                        base_resume = art.content
+                        break
+            oq_artifacts = await run_overqualification_shield(context, base_resume)
+            artifacts.extend(oq_artifacts)
+        except Exception as e:
+            logger.warning("Overqualification Shield failed: %s", e)
 
     return artifacts

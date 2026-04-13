@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.22.0] - 2026-04-13
+
+### Added
+- **Senior Candidate Optimization Suite**: Four features designed to maximize interview conversion for very senior candidates facing overqualification bias and degree-gate filtering
+- **Role Fit Triage** (Scout Enhancement): Three new analysis sections added to the job match analysis:
+  - **Overqualification Risk** (0-100): Compares candidate seniority level to role level, flags title gaps, scope mismatches, and compensation risk
+  - **Degree Gate Analysis** (HARD/SOFT/NONE): Classifies education requirements as hard gates, soft preferences, or absent — identifies if experience can satisfy "or equivalent" clauses
+  - **Pipeline Investment Recommendation** (FULL_PIPELINE/QUICK_APPLY/SKIP): Saves time by triaging which roles are worth full agent investment vs. quick-apply or skip
+- **Overqualification Shield** (Tailor Toggle): New post-processing pass on Tailor that detects and neutralizes overqualification signals:
+  - Pattern-based analysis detects executive titles (VP/Director/C-suite), large budget/headcount scope, executive language (board presentations, C-suite, enterprise-wide), and scale mismatches (global operations, revenue figures)
+  - Produces `overqualification_report` artifact with risk score (0-100) and categorized findings
+  - AI right-sizer produces `right_sized_resume` that reframes seniority as focused expertise without fabricating or removing accomplishments — VP titles become "Engineering Leader", budget figures become delivery outcomes, "Why This Role" positioning statement added
+  - Chains with Ageism Shield: when both enabled, overqualification shield receives the ageism-scrubbed output to prevent re-introducing age signals
+  - Amber-themed toggle on Tailor card (default OFF)
+- **Recruiter Screen Survival Guide** (Coach Enhancement): New third artifact covering 8 sections of gatekeeper questions that kill senior candidates:
+  1. "Aren't you overqualified?" — 3 deflection scripts
+  2. Salary expectations — bracket strategy + deflection
+  3. "Why this role? Seems like a step down." — intentional-move narrative
+  4. "How long do you plan to stay?" — longevity assurance
+  5. "We were looking for someone more junior…" — value-per-dollar redirect
+  6. "Tell me about yourself" — 90-second pitch avoiding overqualification flags
+  7. Red flags to listen for — signals the company will never pay fairly
+  8. Questions to ask the recruiter — right-level engagement
+- **Resume Fallback Chain Update**: `right_sized_resume` inserted into priority chain for downstream agents:
+  - Achievement Amplifier: right_sized → ageism_scrubbed → tailored
+  - ATS Predictor: amplified → right_sized → ageism_scrubbed → tailored
+  - Hiring Manager Sim: amplified → right_sized → ageism_scrubbed → tailored
+  - Outreach Drafter: amplified → right_sized → ageism_scrubbed → tailored
+- Managed prompt for overqualification_shield seeded via Alembic migration (026) with temperature 0.5
+- 12 backend unit tests for pattern detection: title seniority, scope/budget, executive language, scale mismatch, risk scoring, and report formatting
+
 ## [0.21.0] - 2026-04-13
 
 ### Added

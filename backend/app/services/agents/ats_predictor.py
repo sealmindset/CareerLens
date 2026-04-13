@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 def _get_best_resume_content(context: AgentContext) -> str:
-    """Get the best available resume: amplified > ageism_scrubbed > tailored."""
-    for artifact_type in ("amplified_resume", "ageism_scrubbed_resume", "tailored_resume"):
+    """Get the best available resume: amplified > right_sized > ageism_scrubbed > tailored."""
+    for artifact_type in ("amplified_resume", "right_sized_resume", "ageism_scrubbed_resume", "tailored_resume"):
         for artifact in context.workspace_artifacts:
             if artifact.artifact_type == artifact_type:
                 return artifact.content

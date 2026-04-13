@@ -35,6 +35,7 @@ class AgentContext:
     workspace_artifacts: list[WorkspaceArtifact]
     additional_instructions: str | None = None
     ageism_shield: bool = False
+    overqualification_shield: bool = False
 
 
 async def load_agent_context(
@@ -44,6 +45,7 @@ async def load_agent_context(
     application_id: uuid.UUID,
     additional_instructions: str | None = None,
     ageism_shield: bool = False,
+    overqualification_shield: bool = False,
 ) -> AgentContext:
     """Load all context data an agent might need."""
     # Load application with job
@@ -72,6 +74,7 @@ async def load_agent_context(
         workspace_artifacts=artifacts,
         additional_instructions=additional_instructions,
         ageism_shield=ageism_shield,
+        overqualification_shield=overqualification_shield,
     )
 
 

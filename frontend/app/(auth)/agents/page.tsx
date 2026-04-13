@@ -63,6 +63,7 @@ import {
   CalendarRange,
   Mail,
   Gavel,
+  ShieldAlert,
 } from "lucide-react";
 
 interface AgentDef {
@@ -231,6 +232,9 @@ export default function AgentsPage() {
 
   // Ageism Shield toggle (for Tailor agent)
   const [ageismShield, setAgeismShield] = useState(true);
+
+  // Overqualification Shield toggle (for Tailor agent)
+  const [overqualificationShield, setOverqualificationShield] = useState(false);
 
   // Workspace state
   const [jobListings, setJobListings] = useState<JobListing[]>([]);
@@ -626,6 +630,9 @@ export default function AgentsPage() {
       const body: Record<string, unknown> = { agent_name: agentName };
       if (agentName === "tailor" && ageismShield) {
         body.ageism_shield = true;
+      }
+      if (agentName === "tailor" && overqualificationShield) {
+        body.overqualification_shield = true;
       }
       const result = await apiPost<AgentTaskResult>(
         `/agents/workspaces/${workspace.id}/run-agent`,
@@ -1185,6 +1192,45 @@ export default function AgentsPage() {
                           <ShieldCheck
                             className="h-4 w-4 shrink-0"
                             style={{ color: ageismShield ? "rgb(139,92,246)" : "var(--muted-foreground)", opacity: ageismShield ? 1 : 0.4 }}
+                          />
+                        </label>
+                      )}
+
+                      {/* Overqualification Shield toggle (Tailor only) */}
+                      {agent.key === "tailor" && (
+                        <label
+                          className="flex items-center gap-2 mb-2 cursor-pointer rounded-md px-3 py-2 transition-colors"
+                          style={{
+                            backgroundColor: overqualificationShield ? "rgba(217,119,6,0.08)" : "transparent",
+                            border: overqualificationShield ? "1px solid rgba(217,119,6,0.3)" : "1px solid transparent",
+                          }}
+                        >
+                          <div
+                            className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors"
+                            style={{
+                              backgroundColor: overqualificationShield ? "rgb(217,119,6)" : "var(--border)",
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setOverqualificationShield(!overqualificationShield);
+                            }}
+                          >
+                            <span
+                              className="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform"
+                              style={{
+                                transform: overqualificationShield ? "translate(17px, 2px)" : "translate(2px, 2px)",
+                              }}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium">Overqualification Shield</span>
+                            <p className="text-[10px] leading-tight" style={{ color: "var(--muted-foreground)" }}>
+                              Right-size titles, de-emphasize scope, add &quot;Why This Role&quot; positioning
+                            </p>
+                          </div>
+                          <ShieldAlert
+                            className="h-4 w-4 shrink-0"
+                            style={{ color: overqualificationShield ? "rgb(217,119,6)" : "var(--muted-foreground)", opacity: overqualificationShield ? 1 : 0.4 }}
                           />
                         </label>
                       )}

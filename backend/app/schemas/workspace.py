@@ -85,6 +85,7 @@ class AgentTaskRequest(BaseModel):
     task_type: str | None = None  # optional override; defaults to agent's primary task
     additional_instructions: str | None = None  # user-provided guidance
     ageism_shield: bool = False  # when True, Tailor runs the Ageism Shield post-pass
+    overqualification_shield: bool = False  # when True, Tailor runs the Overqualification Shield post-pass
 
 
 class AgentTaskResult(BaseModel):

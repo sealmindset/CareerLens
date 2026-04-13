@@ -152,23 +152,23 @@ AGENT_REQUIREMENTS = {
     "achievement_amplifier": {
         "description": "Strengthens every resume bullet into a high-impact statement",
         "required": ["profile_basic", "job_listing"],
-        "optional": ["tailored_resume", "ageism_scrubbed_resume"],
+        "optional": ["tailored_resume", "ageism_scrubbed_resume", "right_sized_resume"],
         "next_agent": "ats_predictor",
     },
     "ats_predictor": {
         "description": "Simulates ATS parsing and scores your resume against the job keywords",
         "required": ["job_listing"],
-        "optional": ["tailored_resume", "amplified_resume"],
+        "optional": ["tailored_resume", "amplified_resume", "right_sized_resume"],
         "next_agent": "hiring_manager_sim",
     },
     "hiring_manager_sim": {
         "description": "Evaluates your resume from the hiring manager's perspective",
         "required": ["job_listing"],
-        "optional": ["tailored_resume", "amplified_resume", "ats_score"],
+        "optional": ["tailored_resume", "amplified_resume", "right_sized_resume", "ats_score"],
         "next_agent": "coach",
     },
     "coach": {
-        "description": "Prepares you for interviews with practice questions and feedback",
+        "description": "Prepares you for interviews with practice questions, feedback, and recruiter screen scripts",
         "required": ["profile_basic", "job_listing"],
         "optional": ["job_match_analysis", "skill_gap_report"],
         "next_agent": "talking_points",
@@ -200,7 +200,7 @@ AGENT_REQUIREMENTS = {
     "outreach_drafter": {
         "description": "Drafts LinkedIn and email messages to reach the hiring manager directly",
         "required": ["job_listing"],
-        "optional": ["ninety_day_plan", "company_brief", "tailored_resume"],
+        "optional": ["ninety_day_plan", "company_brief", "tailored_resume", "right_sized_resume"],
         "next_agent": "coordinator",
     },
     "coordinator": {
@@ -356,6 +356,9 @@ def _artifact_to_agent(artifact_type: str) -> str:
         "hiring_manager_review": "hiring_manager_sim",
         "ageism_report": "tailor",
         "ageism_scrubbed_resume": "tailor",
+        "overqualification_report": "tailor",
+        "right_sized_resume": "tailor",
+        "recruiter_screen_guide": "coach",
         "ninety_day_plan": "ninety_day_plan",
         "outreach_message": "outreach_drafter",
         "agent_verdicts": "interview_verdict",

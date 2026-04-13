@@ -29,6 +29,27 @@ Include:
 5. **Positioning Strategy** -- how to frame the application to maximize match perception
 6. **Key Keywords** -- important terms from the job description to echo in resume/cover letter
 
+7. **Overqualification Risk** (0-100)
+   - Compare candidate seniority level (titles, scope, budget authority) to the role level
+   - Flag title gaps (e.g., VP applying for Senior IC), scope mismatches, compensation risk
+   - 0 = perfect level match, 100 = severe overqualification
+   - Consider: will the hiring manager see this person as a flight risk or a bad culture fit?
+
+8. **Degree Gate Analysis**
+   - Classify the education requirement:
+     - **HARD**: "required", "must have", "minimum qualification" -- likely ATS auto-filtered without it
+     - **SOFT**: "preferred", "or equivalent experience", "desired" -- experience can substitute
+     - **NONE**: no education requirement stated
+   - Note if the candidate's years of experience could satisfy "or equivalent" clauses
+   - Flag if the requirement is a true gate vs. copy-paste boilerplate
+
+9. **Pipeline Investment Recommendation**
+   - Based on match score, overqualification risk, and degree gate, recommend one:
+     - **FULL_PIPELINE**: Strong match, worth running all agents and investing in tailored materials
+     - **QUICK_APPLY**: Decent match but not worth full investment -- apply with existing resume + light tailoring
+     - **SKIP**: Poor fit, overqualification kills it, or hard degree gate blocks entry -- move on
+   - Include a 1-sentence justification
+
 Format as a structured markdown document. Be specific -- reference actual skills, job titles, and requirements by name."""
 
     match_response = await call_agent_ai(
