@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.18.0] - 2026-04-13
+
+### Added
+- **Ageism Shield**: AI-powered age signal detection and resume scrubbing for the Tailor agent
+- Toggle switch on Tailor agent card to enable/disable Ageism Shield post-processing
+- Pattern-based analysis engine detecting 5 categories of age signals: dates, education, language, technology, and structural patterns
+- 26 dated technology references and 10 age-revealing language patterns in the detection library
+- Risk scoring system (0-100) with severity-weighted findings (high: 25, medium: 15, low: 5)
+- Markdown risk report artifact (`ageism_report`) with categorized findings and specific fix suggestions
+- AI-powered resume scrubber (`ageism_scrubbed_resume`) that rewrites resumes to remove age signals while preserving expertise
+- Holistic vibe check ensuring the resume reads as forward-looking and impact-focused, not retrospective
+- Education section handling: institution and field of study only, no dates, no qualifying language
+- Earlier Career consolidation: roles older than 15 years compressed to company names only
+- Managed prompt (`ageism-shield-system`) seeded via Alembic migration 019
+- `AgentContext` and `AgentTaskRequest` extended with `ageism_shield` boolean field
+- Integration into Tailor pipeline: runs after resume generation when toggle is enabled
+- 10 backend unit tests covering date detection, education dates, language patterns, technology flags, clean resume scoring, report format, incomplete education, role count, and risk score capping
+
 ## [0.17.1] - 2026-04-13
 
 ### Added

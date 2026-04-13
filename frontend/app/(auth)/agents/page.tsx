@@ -183,6 +183,9 @@ export default function AgentsPage() {
   // Export state
   const [exporting, setExporting] = useState(false);
 
+  // Ageism Shield toggle (for Tailor agent)
+  const [ageismShield, setAgeismShield] = useState(false);
+
   // Workspace state
   const [jobListings, setJobListings] = useState<JobListing[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -469,9 +472,13 @@ export default function AgentsPage() {
     setRunningAgent(agentName);
     setTaskResult(null);
     try {
+      const body: Record<string, unknown> = { agent_name: agentName };
+      if (agentName === "tailor" && ageismShield) {
+        body.ageism_shield = true;
+      }
       const result = await apiPost<AgentTaskResult>(
         `/agents/workspaces/${workspace.id}/run-agent`,
-        { agent_name: agentName },
+        body,
       );
       setTaskResult(result);
 
@@ -991,6 +998,45 @@ export default function AgentsPage() {
                           </div>
                         );
                       })()}
+
+                      {/* Ageism Shield toggle (Tailor only) */}
+                      {agent.key === "tailor" && (
+                        <label
+                          className="flex items-center gap-2 mb-2 cursor-pointer rounded-md px-3 py-2 transition-colors"
+                          style={{
+                            backgroundColor: ageismShield ? "rgba(139,92,246,0.08)" : "transparent",
+                            border: ageismShield ? "1px solid rgba(139,92,246,0.3)" : "1px solid transparent",
+                          }}
+                        >
+                          <div
+                            className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors"
+                            style={{
+                              backgroundColor: ageismShield ? "rgb(139,92,246)" : "var(--border)",
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setAgeismShield(!ageismShield);
+                            }}
+                          >
+                            <span
+                              className="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform"
+                              style={{
+                                transform: ageismShield ? "translate(17px, 2px)" : "translate(2px, 2px)",
+                              }}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium">Ageism Shield</span>
+                            <p className="text-[10px] leading-tight" style={{ color: "var(--muted-foreground)" }}>
+                              Remove age signals, consolidate early career, scrub dates
+                            </p>
+                          </div>
+                          <ShieldCheck
+                            className="h-4 w-4 shrink-0"
+                            style={{ color: ageismShield ? "rgb(139,92,246)" : "var(--muted-foreground)", opacity: ageismShield ? 1 : 0.4 }}
+                          />
+                        </label>
+                      )}
 
                       <div className="flex gap-2">
                         {agent.key === "auto_fill" ? (

@@ -426,6 +426,7 @@ async def run_agent_task(
         workspace_id=workspace_id,
         application_id=workspace.application_id,
         additional_instructions=data.additional_instructions,
+        ageism_shield=data.ageism_shield,
     )
 
     try:

@@ -21,6 +21,7 @@
 - [x] Add markdown rendering for agent artifacts (currently plain text)
 - [x] Add artifact export (download as PDF/Word)
 - [x] NeMo Guardrails AI safety testing suite
+- [x] AI-Powered Ageism Shield for Tailor agent (age signal detection + resume scrubbing)
 
 ## Low Priority
 - [x] Add job search capability (active job discovery)

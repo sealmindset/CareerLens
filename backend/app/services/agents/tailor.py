@@ -23,6 +23,7 @@ from app.models.resume_variant import ResumeVariant
 from app.models.story_bank import StoryBankStory
 from app.models.workspace import WorkspaceArtifact
 from app.services.agents.base import AgentContext, call_agent_ai
+from app.services.agents.ageism_shield import run_ageism_shield
 from app.services.workspace_service import save_artifact
 
 logger = logging.getLogger(__name__)
@@ -389,5 +390,13 @@ Return your evaluation as a JSON object (no markdown fencing):
             artifacts.append(eval_artifact)
         except Exception as e:
             logger.warning("Resume evaluation failed: %s", e)
+
+    # Ageism Shield post-pass (when enabled)
+    if context.ageism_shield:
+        try:
+            shield_artifacts = await run_ageism_shield(context, resume_response)
+            artifacts.extend(shield_artifacts)
+        except Exception as e:
+            logger.warning("Ageism Shield failed: %s", e)
 
     return artifacts
