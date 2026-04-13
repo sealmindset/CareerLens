@@ -24,8 +24,16 @@ from app.services.workspace_service import (
 logger = logging.getLogger(__name__)
 
 PIPELINE_SEQUENCES = {
-    "full": ["scout", "tailor", "coach", "talking_points", "strategist", "brand_advisor", "coordinator"],
-    "quick": ["scout", "tailor", "talking_points", "strategist"],
+    "full": [
+        "scout", "tailor",
+        "achievement_amplifier", "ats_predictor", "hiring_manager_sim",
+        "coach", "talking_points", "strategist", "brand_advisor", "coordinator",
+    ],
+    "quick": [
+        "scout", "tailor",
+        "achievement_amplifier", "ats_predictor", "hiring_manager_sim",
+        "talking_points", "strategist",
+    ],
 }
 
 

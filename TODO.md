@@ -22,6 +22,7 @@
 - [x] Add artifact export (download as PDF/Word)
 - [x] NeMo Guardrails AI safety testing suite
 - [x] AI-Powered Ageism Shield for Tailor agent (age signal detection + resume scrubbing)
+- [x] Resume Review Loop: Achievement Amplifier + ATS Predictor + Hiring Manager Simulator
 
 ## Low Priority
 - [x] Add job search capability (active job discovery)

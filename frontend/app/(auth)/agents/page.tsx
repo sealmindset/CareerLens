@@ -57,6 +57,9 @@ import {
   ShieldCheck,
   SendHorizonal,
   TriangleAlert,
+  Flame,
+  BarChart3,
+  UserCheck,
 } from "lucide-react";
 
 interface AgentDef {
@@ -84,6 +87,30 @@ const agents: AgentDef[] = [
     description: "Rewrites your resume and cover letter to match the job listing language authentically.",
     modelTier: "premium",
     color: "rgb(139,92,246)",
+  },
+  {
+    name: "Achievement Amplifier",
+    key: "achievement_amplifier",
+    icon: Flame,
+    description: "Strengthens every resume bullet into a high-impact statement backed by verified metrics.",
+    modelTier: "standard",
+    color: "rgb(220,38,38)",
+  },
+  {
+    name: "ATS Predictor",
+    key: "ats_predictor",
+    icon: BarChart3,
+    description: "Simulates ATS parsing to score your resume and identify missing keywords.",
+    modelTier: "standard",
+    color: "rgb(13,148,136)",
+  },
+  {
+    name: "Hiring Manager",
+    key: "hiring_manager_sim",
+    icon: UserCheck,
+    description: "Reviews your resume as if they were the hiring manager for this specific role.",
+    modelTier: "standard",
+    color: "rgb(124,58,237)",
   },
   {
     name: "Coach",

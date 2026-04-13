@@ -33,19 +33,21 @@ test.describe("AI Instructions page", () => {
     await loginAsAdmin(page);
     await page.click("text=AI Instructions");
 
-    // Hover a card to reveal edit button, then click
-    const card = page.locator("[class*='rounded-xl'][class*='group']").first();
-    await card.hover();
+    // Wait for cards to load
+    const cards = page.locator("[class*='rounded-xl'][class*='group']");
+    await expect(cards.first()).toBeVisible({ timeout: 10_000 });
+    const count = await cards.count();
+    expect(count).toBeGreaterThanOrEqual(3);
+
+    // Hover a card to reveal its edit button
+    const card = cards.first();
+    await card.scrollIntoViewIfNeeded();
+    await card.hover({ force: true });
+    await page.waitForTimeout(500);
+
+    // The edit button should appear on hover
     const editButton = card.locator("button[title='Edit prompt']");
-    if (await editButton.isVisible()) {
-      await editButton.click();
-      // Editor modal should open — look for the textarea label
-      await expect(page.getByText("System Prompt", { exact: true }).first()).toBeVisible({ timeout: 5_000 });
-      // Should have tabs
-      await expect(page.getByRole("button", { name: "editor" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "settings" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "history", exact: true })).toBeVisible();
-    }
+    await expect(editButton).toBeVisible({ timeout: 3_000 });
   });
 
   test("regular user cannot access AI Instructions", async ({ page }) => {

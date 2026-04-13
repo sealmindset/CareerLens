@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.19.0] - 2026-04-13
+
+### Added
+- **Resume Review Loop**: Three new AI agents that evaluate your resume before submission
+- **Achievement Amplifier** agent: Rewrites every bullet into a high-impact statement, cross-references Story Bank verified metrics, uses `[quantify: ...]` placeholders instead of fabricating numbers
+- **ATS Score Predictor** agent: Simulates ATS keyword parsing with predicted score (0-100), 6-category scoring breakdown, section heading compatibility analysis, missing keyword identification, and quick-win fixes
+- **Hiring Manager Simulator** agent: Reads your resume as if they were the hiring manager — 7-second scan verdict, call/no-call decision, strengths, concerns, interview questions they'd ask, percentile ranking vs. typical applicant pool, and specific improvements ranked by impact
+- Resume review loop integrated into both Full and Quick pipelines (runs after Tailor, before Coach)
+- Pipeline order: Scout → Tailor → Achievement Amplifier → ATS Predictor → Hiring Manager Sim → Coach → ...
+- Each agent uses intelligent resume fallback chain: amplified > ageism_scrubbed > tailored
+- 3 new managed prompts seeded via Alembic migrations (020, 021, 022)
+- 3 new frontend agent cards with distinct colors (red, teal, violet) and icons (Flame, BarChart3, UserCheck)
+- Preflight requirements and next-agent chain updated for all 3 agents
+- 16 backend unit tests covering resume fallback logic, Story Bank context formatting, and ATS score retrieval
+
 ## [0.18.0] - 2026-04-13
 
 ### Added

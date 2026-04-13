@@ -147,6 +147,24 @@ AGENT_REQUIREMENTS = {
         "description": "Customizes your resume to match a specific job listing",
         "required": ["profile_full", "job_listing"],
         "optional": ["job_match_analysis"],
+        "next_agent": "achievement_amplifier",
+    },
+    "achievement_amplifier": {
+        "description": "Strengthens every resume bullet into a high-impact statement",
+        "required": ["profile_basic", "job_listing"],
+        "optional": ["tailored_resume", "ageism_scrubbed_resume"],
+        "next_agent": "ats_predictor",
+    },
+    "ats_predictor": {
+        "description": "Simulates ATS parsing and scores your resume against the job keywords",
+        "required": ["job_listing"],
+        "optional": ["tailored_resume", "amplified_resume"],
+        "next_agent": "hiring_manager_sim",
+    },
+    "hiring_manager_sim": {
+        "description": "Evaluates your resume from the hiring manager's perspective",
+        "required": ["job_listing"],
+        "optional": ["tailored_resume", "amplified_resume", "ats_score"],
         "next_agent": "coach",
     },
     "coach": {
@@ -312,5 +330,10 @@ def _artifact_to_agent(artifact_type: str) -> str:
         "form_fill_script": "auto_fill",
         "chatbot_transcript": "auto_fill",
         "application_guide": "auto_fill",
+        "amplified_resume": "achievement_amplifier",
+        "ats_score": "ats_predictor",
+        "hiring_manager_review": "hiring_manager_sim",
+        "ageism_report": "tailor",
+        "ageism_scrubbed_resume": "tailor",
     }
     return mapping.get(artifact_type, "unknown")
