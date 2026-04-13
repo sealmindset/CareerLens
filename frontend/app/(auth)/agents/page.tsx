@@ -211,7 +211,7 @@ export default function AgentsPage() {
   const [exporting, setExporting] = useState(false);
 
   // Ageism Shield toggle (for Tailor agent)
-  const [ageismShield, setAgeismShield] = useState(false);
+  const [ageismShield, setAgeismShield] = useState(true);
 
   // Workspace state
   const [jobListings, setJobListings] = useState<JobListing[]>([]);
