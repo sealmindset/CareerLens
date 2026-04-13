@@ -27,7 +27,8 @@ PIPELINE_SEQUENCES = {
     "full": [
         "scout", "tailor",
         "achievement_amplifier", "ats_predictor", "hiring_manager_sim",
-        "coach", "talking_points", "strategist", "brand_advisor", "coordinator",
+        "coach", "talking_points", "strategist", "brand_advisor",
+        "ninety_day_plan", "outreach_drafter", "coordinator",
     ],
     "quick": [
         "scout", "tailor",

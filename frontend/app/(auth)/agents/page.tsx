@@ -60,6 +60,9 @@ import {
   Flame,
   BarChart3,
   UserCheck,
+  CalendarRange,
+  Mail,
+  Gavel,
 } from "lucide-react";
 
 interface AgentDef {
@@ -143,6 +146,22 @@ const agents: AgentDef[] = [
     description: "Researches target companies and aligns your personal brand to their culture.",
     modelTier: "standard",
     color: "rgb(236,72,153)",
+  },
+  {
+    name: "90-Day Plan",
+    key: "ninety_day_plan",
+    icon: CalendarRange,
+    description: "Creates a 90-day onboarding plan showing how you'll create value from day one.",
+    modelTier: "standard",
+    color: "rgb(5,150,105)",
+  },
+  {
+    name: "Outreach Drafter",
+    key: "outreach_drafter",
+    icon: Mail,
+    description: "Drafts LinkedIn and email messages to reach the hiring manager directly.",
+    modelTier: "standard",
+    color: "rgb(217,119,6)",
   },
   {
     name: "Coordinator",
@@ -231,6 +250,10 @@ export default function AgentsPage() {
   const [downloading, setDownloading] = useState<string | null>(null);
   const artifactViewerRef = useRef<HTMLDivElement>(null);
 
+  // Interview Verdict state
+  const [verdictRunning, setVerdictRunning] = useState(false);
+  const [verdictExpanded, setVerdictExpanded] = useState<Set<string>>(new Set());
+
   // Auto-Fill modal state
   const [showAutoFillModal, setShowAutoFillModal] = useState(false);
   const [autoFillLoading, setAutoFillLoading] = useState(false);
@@ -309,6 +332,107 @@ export default function AgentsPage() {
       arts.sort((a, b) => b.version - a.version);
     }
     return groups;
+  };
+
+  // ─── Interview Verdict helpers ────────────────────────────────────
+  interface VerdictEntry {
+    agent: string;
+    agent_label: string;
+    vote: string;
+    confidence: number;
+    reasoning: string;
+    key_factor: string;
+  }
+  interface CaptainVerdict {
+    decision: string;
+    confidence: number;
+    headline: string;
+    intangibles: string[];
+    what_others_missed: string;
+    strategic_advice: string;
+  }
+  interface VerdictData {
+    verdicts: VerdictEntry[];
+    captain: CaptainVerdict;
+    summary: { interview_votes: number; pass_votes: number; total_agents: number; overall_sentiment: string };
+  }
+
+  const getVerdictData = useCallback((): VerdictData | null => {
+    if (!workspace) return null;
+    const art = workspace.artifacts
+      .filter((a) => a.artifact_type === "agent_verdicts" && a.agent_name === "interview_verdict")
+      .sort((a, b) => b.version - a.version)[0];
+    if (!art) return null;
+    try {
+      return JSON.parse(art.content) as VerdictData;
+    } catch {
+      return null;
+    }
+  }, [workspace]);
+
+  const getNarrativeArtifact = useCallback((): WorkspaceArtifact | null => {
+    if (!workspace) return null;
+    return workspace.artifacts
+      .filter((a) => a.artifact_type === "interview_verdict" && a.agent_name === "interview_verdict")
+      .sort((a, b) => b.version - a.version)[0] || null;
+  }, [workspace]);
+
+  const voteColor = (vote: string) => {
+    const colors: Record<string, string> = {
+      strong_interview: "rgb(5,150,105)",
+      interview: "rgb(16,185,129)",
+      lean_interview: "rgb(13,148,136)",
+      lean_pass: "rgb(217,119,6)",
+      pass: "rgb(239,68,68)",
+      strong_pass: "rgb(185,28,28)",
+    };
+    return colors[vote] || "rgb(107,114,128)";
+  };
+
+  const voteBg = (vote: string) => {
+    const bgs: Record<string, string> = {
+      strong_interview: "rgba(5,150,105,0.1)",
+      interview: "rgba(16,185,129,0.1)",
+      lean_interview: "rgba(13,148,136,0.1)",
+      lean_pass: "rgba(217,119,6,0.1)",
+      pass: "rgba(239,68,68,0.1)",
+      strong_pass: "rgba(185,28,28,0.1)",
+    };
+    return bgs[vote] || "rgba(107,114,128,0.1)";
+  };
+
+  const voteLabel = (vote: string) =>
+    vote.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+
+  const isInterviewVote = (vote: string) =>
+    vote === "strong_interview" || vote === "interview" || vote === "lean_interview";
+
+  const toggleVerdictExpand = (agent: string) => {
+    setVerdictExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(agent)) next.delete(agent);
+      else next.add(agent);
+      return next;
+    });
+  };
+
+  const runVerdict = async () => {
+    if (!workspace || !selectedAppId) return;
+    setVerdictRunning(true);
+    try {
+      const result = await apiPost<AgentTaskResult>(
+        `/agents/workspaces/${workspace.id}/run-agent`,
+        { agent_name: "interview_verdict", additional_instructions: null, ageism_shield: false }
+      );
+      // Reload workspace to pick up new artifacts
+      const updated = await apiGet<AgentWorkspace>(`/agents/workspaces/${workspace.id}`);
+      setWorkspace(updated);
+      setTaskResult(result);
+    } catch (err) {
+      console.error("Verdict failed:", err);
+    } finally {
+      setVerdictRunning(false);
+    }
   };
 
   const canWorkspace = hasPermission("workspace", "create") || hasPermission("workspace", "view");
@@ -1113,6 +1237,237 @@ export default function AgentsPage() {
               </div>
             </div>
 
+            {/* ─── Interview Likelihood Indicator ─── */}
+            <div
+              className="rounded-xl border p-6"
+              style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: "rgba(217,119,6,0.1)", color: "rgb(217,119,6)" }}
+                  >
+                    <Gavel className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-lg">Interview Likelihood Indicator</h2>
+                    <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                      Synthesized verdict from all agents
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={runVerdict}
+                  disabled={verdictRunning || pipelineRunning || !!runningAgent}
+                  className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                  style={{ backgroundColor: "rgb(217,119,6)", color: "white" }}
+                >
+                  {verdictRunning ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  {getVerdictData() ? "Re-analyze" : "Get Verdict"}
+                </button>
+              </div>
+
+              {verdictRunning && (
+                <div className="flex items-center justify-center py-8 gap-3">
+                  <Loader2 className="h-6 w-6 animate-spin" style={{ color: "rgb(217,119,6)" }} />
+                  <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                    Analyzing all agent outputs and rendering final verdict...
+                  </span>
+                </div>
+              )}
+
+              {!verdictRunning && (() => {
+                const vd = getVerdictData();
+                const narrative = getNarrativeArtifact();
+                if (!vd) {
+                  return (
+                    <p className="text-sm text-center py-6" style={{ color: "var(--muted-foreground)" }}>
+                      Run agents first, then click &quot;Get Verdict&quot; for a synthesized interview likelihood analysis.
+                    </p>
+                  );
+                }
+
+                const decisionColor = vd.captain.decision === "INTERVIEW"
+                  ? "rgb(5,150,105)" : vd.captain.decision === "PASS"
+                  ? "rgb(239,68,68)" : "rgb(217,119,6)";
+                const decisionBg = vd.captain.decision === "INTERVIEW"
+                  ? "rgba(5,150,105,0.1)" : vd.captain.decision === "PASS"
+                  ? "rgba(239,68,68,0.1)" : "rgba(217,119,6,0.1)";
+
+                const interviewCount = vd.verdicts.filter((v) => isInterviewVote(v.vote)).length;
+                const passCount = vd.verdicts.length - interviewCount;
+                const interviewPct = vd.verdicts.length > 0 ? (interviewCount / vd.verdicts.length) * 100 : 0;
+
+                return (
+                  <>
+                    {/* Captain's Verdict */}
+                    <div
+                      className="rounded-lg p-5 mb-5"
+                      style={{
+                        backgroundColor: decisionBg,
+                        border: `2px solid ${decisionColor}`,
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold"
+                          style={{ backgroundColor: decisionColor, color: "white" }}
+                        >
+                          <Gavel className="h-3.5 w-3.5" />
+                          {vd.captain.decision}
+                        </span>
+                        <span className="text-sm font-medium" style={{ color: decisionColor }}>
+                          Confidence: {vd.captain.confidence}%
+                        </span>
+                      </div>
+                      <h3 className="font-semibold text-lg mb-3">{vd.captain.headline}</h3>
+
+                      {vd.captain.what_others_missed && (
+                        <div className="mb-3">
+                          <h4 className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--muted-foreground)" }}>
+                            What the Advisory Team Missed
+                          </h4>
+                          <p className="text-sm">{vd.captain.what_others_missed}</p>
+                        </div>
+                      )}
+
+                      {vd.captain.intangibles && vd.captain.intangibles.length > 0 && (
+                        <div className="mb-3">
+                          <h4 className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--muted-foreground)" }}>
+                            Intangible Factors
+                          </h4>
+                          <ul className="space-y-1">
+                            {vd.captain.intangibles.map((item, i) => (
+                              <li key={i} className="text-sm flex items-start gap-2">
+                                <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color: decisionColor }} />
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {vd.captain.strategic_advice && (
+                        <div
+                          className="rounded-md p-3"
+                          style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
+                        >
+                          <h4 className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--muted-foreground)" }}>
+                            Strategic Advice
+                          </h4>
+                          <p className="text-sm">{vd.captain.strategic_advice}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Vote summary bar */}
+                    <div className="flex items-center gap-4 mb-4">
+                      <span className="text-sm font-medium" style={{ color: "rgb(5,150,105)" }}>
+                        {interviewCount} Interview
+                      </span>
+                      <span className="text-sm font-medium" style={{ color: "rgb(239,68,68)" }}>
+                        {passCount} Pass
+                      </span>
+                      <div
+                        className="flex-1 h-2.5 rounded-full overflow-hidden"
+                        style={{ backgroundColor: "var(--border)" }}
+                      >
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${interviewPct}%`,
+                            backgroundColor: "rgb(16,185,129)",
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                        {vd.verdicts.length} agents voted
+                      </span>
+                    </div>
+
+                    {/* Agent vote cards */}
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {vd.verdicts.map((v) => {
+                        const agentDef = agentByKey[v.agent];
+                        const AgentIcon = agentDef?.icon;
+                        const isExpanded = verdictExpanded.has(v.agent);
+                        return (
+                          <div
+                            key={v.agent}
+                            className="rounded-lg border p-4"
+                            style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              {AgentIcon && (
+                                <div
+                                  className="flex h-7 w-7 items-center justify-center rounded-md"
+                                  style={{
+                                    backgroundColor: agentDef ? `${agentDef.color}20` : "var(--border)",
+                                    color: agentDef?.color || "var(--muted-foreground)",
+                                  }}
+                                >
+                                  <AgentIcon className="h-3.5 w-3.5" />
+                                </div>
+                              )}
+                              <span className="text-sm font-medium flex-1">{v.agent_label}</span>
+                              <span
+                                className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                                style={{ backgroundColor: voteBg(v.vote), color: voteColor(v.vote) }}
+                              >
+                                {voteLabel(v.vote)}
+                              </span>
+                            </div>
+                            {/* Confidence bar */}
+                            <div
+                              className="h-1.5 rounded-full mb-2"
+                              style={{ backgroundColor: "var(--border)" }}
+                            >
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${v.confidence}%`,
+                                  backgroundColor: voteColor(v.vote),
+                                }}
+                              />
+                            </div>
+                            <p className="text-xs font-medium mb-1">{v.key_factor}</p>
+                            <button
+                              onClick={() => toggleVerdictExpand(v.agent)}
+                              className="text-[10px] underline"
+                              style={{ color: "var(--muted-foreground)" }}
+                            >
+                              {isExpanded ? "Hide" : "Show"} reasoning
+                            </button>
+                            {isExpanded && (
+                              <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+                                {v.reasoning}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Link to full narrative */}
+                    {narrative && (
+                      <button
+                        onClick={() => setSelectedArtifact(narrative)}
+                        className="mt-4 text-sm font-medium underline"
+                        style={{ color: "var(--primary)" }}
+                      >
+                        View Captain&apos;s Full Analysis
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
             {/* Task result */}
             {taskResult && (
               <div
@@ -1276,6 +1631,10 @@ export default function AgentsPage() {
                   {selectedArtifact.content_format === "javascript" ? (
                     <pre className="text-xs leading-relaxed" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                       <code>{selectedArtifact.content}</code>
+                    </pre>
+                  ) : selectedArtifact.content_format === "json" ? (
+                    <pre className="text-xs leading-relaxed" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      <code>{(() => { try { return JSON.stringify(JSON.parse(selectedArtifact.content), null, 2); } catch { return selectedArtifact.content; } })()}</code>
                     </pre>
                   ) : (
                     <MarkdownContent content={selectedArtifact.content} />

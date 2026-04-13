@@ -189,6 +189,18 @@ AGENT_REQUIREMENTS = {
         "description": "Researches the company and helps you tailor your personal brand",
         "required": ["job_listing"],
         "optional": ["job_match_analysis"],
+        "next_agent": "ninety_day_plan",
+    },
+    "ninety_day_plan": {
+        "description": "Creates a 90-day onboarding plan showing how you'll create value from day one",
+        "required": ["profile_basic", "job_listing"],
+        "optional": ["company_brief", "culture_analysis", "skill_gap_report"],
+        "next_agent": "outreach_drafter",
+    },
+    "outreach_drafter": {
+        "description": "Drafts LinkedIn and email messages to reach the hiring manager directly",
+        "required": ["job_listing"],
+        "optional": ["ninety_day_plan", "company_brief", "tailored_resume"],
         "next_agent": "coordinator",
     },
     "coordinator": {
@@ -201,6 +213,15 @@ AGENT_REQUIREMENTS = {
         "description": "Analyzes application forms and generates an auto-fill script for your browser",
         "required": ["profile_full", "job_listing"],
         "optional": ["tailored_resume", "cover_letter"],
+        "next_agent": None,
+    },
+    "interview_verdict": {
+        "description": "Synthesizes all agent outputs into an interview likelihood verdict",
+        "required": ["job_listing"],
+        "optional": [
+            "job_match_analysis", "ats_score", "hiring_manager_review",
+            "interview_prep_guide", "application_strategy", "culture_analysis",
+        ],
         "next_agent": None,
     },
 }
@@ -335,5 +356,9 @@ def _artifact_to_agent(artifact_type: str) -> str:
         "hiring_manager_review": "hiring_manager_sim",
         "ageism_report": "tailor",
         "ageism_scrubbed_resume": "tailor",
+        "ninety_day_plan": "ninety_day_plan",
+        "outreach_message": "outreach_drafter",
+        "agent_verdicts": "interview_verdict",
+        "interview_verdict": "interview_verdict",
     }
     return mapping.get(artifact_type, "unknown")

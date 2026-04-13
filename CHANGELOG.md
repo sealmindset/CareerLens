@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.21.0] - 2026-04-13
+
+### Added
+- **Interview Likelihood Indicator**: War-room-style dashboard that synthesizes all agent outputs into a final interview verdict
+- **Interview Verdict agent**: Single AI agent that reads every workspace artifact and produces two outputs:
+  - **Agent Verdicts** (JSON): Per-agent implied vote (strong_interview → strong_pass scale) with confidence %, key factor, and reasoning for 6 evaluative agents (Scout, ATS Predictor, Hiring Manager Sim, Coach, Strategist, Brand Advisor)
+  - **Captain's Verdict** (Markdown): Final judgment considering intangible factors individual agents cannot assess — adaptability, undocumented skills, learning velocity, culture-add potential, transferable expertise, and resilience signals
+- Rich frontend dashboard panel in Application Studio workspace with:
+  - "Get Verdict" manual trigger button (not in any pipeline)
+  - Captain's verdict panel with decision badge, confidence, intangibles list, strategic advice
+  - Vote summary bar showing interview/pass ratio
+  - Agent vote cards grid with color-coded indicators, confidence bars, expandable reasoning
+  - "View Captain's Full Analysis" link to the narrative artifact
+- Vote color scheme: emerald (strong interview) → green → teal → amber → red → dark red (strong pass)
+- JSON artifact content format support in the artifact viewer (formatted pretty-print)
+- Managed prompt seeded via Alembic migration (025) with temperature 0.4 for reliable structured output
+- 7 backend unit tests covering artifact counting, JSON extraction (code fences, raw, fallback), and configuration validation
+
+## [0.20.0] - 2026-04-13
+
+### Added
+- **Candidate Differentiation Suite**: Three features that change HOW the candidate gets seen, not just what they submit
+- **90-Day Plan Generator** agent: Creates a one-page, submission-ready onboarding plan (Week 1-2: Learn & Assess, Week 3-6: Quick Wins, Week 7-12: Strategic Impact) using company research, culture analysis, and skill gap data — a concrete differentiator most candidates never provide
+- **Direct Outreach Drafter** agent: Drafts two ready-to-send messages that bypass the ATS — a LinkedIn connection request (under 300 characters) and a hiring manager email (3-4 sentences) — both reference specific company details and the 90-day plan
+- **Application Timing Advisor**: Enhanced the Strategist agent with posting-age urgency intelligence — calculates days since job was added, classifies into urgency tiers (Fresh <3d, Active 3-7d, Aging 7-14d, Stale 14d+), and injects urgency-adjusted strategy into every timing recommendation
+- Full pipeline updated: Scout → Tailor → Amplifier → ATS → HM Sim → Coach → Talking Points → Strategist → Brand Advisor → **90-Day Plan → Outreach Drafter** → Coordinator
+- Quick pipeline unchanged (differentiation features are full-pipeline only)
+- 2 new managed prompts seeded via Alembic migrations (023, 024) with temperatures 0.7 and 0.6
+- 2 new frontend agent cards: CalendarRange/emerald for 90-Day Plan, Mail/amber for Outreach Drafter
+- Preflight chain updated: brand_advisor → ninety_day_plan → outreach_drafter → coordinator
+- 14 backend unit tests covering artifact lookup helpers and resume fallback logic for both new agents
+
 ## [0.19.0] - 2026-04-13
 
 ### Added
