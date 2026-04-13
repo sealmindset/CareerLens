@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.16.5] - 2026-04-12
+
+### Added
+- **Security Scanner**: Built-in security configuration audit with admin dashboard
+- `GET /api/admin/security/scan` endpoint with 8 security checks (JWT secret, OIDC config, CORS, database credentials, AI provider, debug mode, HTTPS, secret enforcement)
+- Security admin page with score card, severity-coded findings, remediation guidance, and rescan button
+- Sidebar "Security" link under admin section (uses app_settings.view permission)
+- 5 backend tests for security scan endpoint
+
+## [0.16.4] - 2026-04-12
+
+### Added
+- **Job Discovery**: AI-powered job search suggestions with direct links to job boards
+- `POST /api/jobs/discover` endpoint using AI to generate targeted search strategies from user profile
+- Discover Jobs panel on Job Listings page with keyword/location search
+- Clickable search strategy cards that update job board links (LinkedIn, Indeed, Glassdoor, Google Jobs)
+- Fallback to profile headline when AI is unavailable
+- 6 backend tests (auth, response shape, board links, empty query, permissions)
+
+## [0.16.3] - 2026-04-12
+
+### Added
+- **Analytics Dashboard**: Visual job search trends and application pipeline overview
+- `GET /api/analytics/trends` endpoint with status funnel, weekly activity, top companies, match score distribution
+- Analytics page with CSS bar charts: pipeline status, match scores, weekly activity, top companies
+- Summary cards: total jobs, total applications, interview rate, offer rate
+- Sidebar "Analytics" link (uses dashboard.view permission)
+- 5 backend tests + 1 Playwright e2e navigation test
+
+## [0.16.2] - 2026-04-12
+
+### Added
+- **AI Fallback Provider**: Automatic failover to a secondary AI provider when the primary fails
+- `AI_FALLBACK_PROVIDER` setting configurable via Admin Settings (anthropic_foundry, anthropic, openai, ollama)
+- `FallbackAIProvider` wrapper: tries primary provider, falls back to secondary on any error
+- Fallback passes `model=None` to secondary so it uses its own default model
+- Logging on fallback activation for observability
+- 6 unit tests for fallback behavior (primary success, failover, both-fail, streaming, model passthrough)
+
+## [0.16.1] - 2026-04-12
+
+### Added
+- **Applications CSV Export**: Download all application data as a CSV file from Application Studio
+- `GET /api/applications/export?format=csv` endpoint with user-scoped data and enriched job/variant info
+- Export CSV button in Application Studio header (visible when applications exist)
+- 5 backend tests for export endpoint (auth, format validation, data integrity)
+
 ## [0.16.0] - 2026-04-12
 
 ### Added

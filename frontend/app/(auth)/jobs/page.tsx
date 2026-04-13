@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { DataTable } from "@/components/data-table";
 import { DataTableColumnHeader } from "@/components/data-table-column-header";
 import { formatDate } from "@/lib/utils";
-import type { JobListing, JobScrapeResult } from "@/lib/types";
+import type { JobListing, JobScrapeResult, DiscoverResult } from "@/lib/types";
 import {
   Plus,
   X,
@@ -102,6 +102,14 @@ export default function JobsPage() {
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
+
+  // Discover state
+  const [showDiscover, setShowDiscover] = useState(false);
+  const [discoverQuery, setDiscoverQuery] = useState("");
+  const [discoverLocation, setDiscoverLocation] = useState("");
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverResult, setDiscoverResult] = useState<DiscoverResult | null>(null);
+  const [activeSuggestionIdx, setActiveSuggestionIdx] = useState(0);
 
   const canCreate = hasPermission("jobs", "create");
 
@@ -232,6 +240,37 @@ export default function JobsPage() {
 
   const openInStudio = (job: JobListing) => {
     router.push(`/agents?job=${job.id}`);
+  };
+
+  const runDiscover = async () => {
+    setDiscovering(true);
+    setDiscoverResult(null);
+    setActiveSuggestionIdx(0);
+    try {
+      const result = await apiPost<DiscoverResult>("/jobs/discover", {
+        query: discoverQuery,
+        location: discoverLocation,
+      });
+      setDiscoverResult(result);
+    } catch (err) {
+      console.error("Discover failed:", err);
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const updateBoardLinks = (keywords: string) => {
+    if (!discoverResult) return;
+    // Regenerate links client-side for the selected suggestion
+    const kw = encodeURIComponent(keywords);
+    const loc = discoverLocation ? encodeURIComponent(discoverLocation) : "";
+    const links = [
+      { board: "LinkedIn", url: loc ? `https://www.linkedin.com/jobs/search/?keywords=${kw}&location=${loc}` : `https://www.linkedin.com/jobs/search/?keywords=${kw}` },
+      { board: "Indeed", url: loc ? `https://www.indeed.com/jobs?q=${kw}&l=${loc}` : `https://www.indeed.com/jobs?q=${kw}` },
+      { board: "Glassdoor", url: loc ? `https://www.glassdoor.com/Job/jobs.htm?sc.keyword=${kw}&locKeyword=${loc}` : `https://www.glassdoor.com/Job/jobs.htm?sc.keyword=${kw}` },
+      { board: "Google Jobs", url: `https://www.google.com/search?q=${kw}+jobs${loc ? `+${loc}` : ""}` },
+    ];
+    setDiscoverResult({ ...discoverResult, search_links: links });
   };
 
   const columns = useMemo<ColumnDef<JobListing, unknown>[]>(
@@ -429,6 +468,17 @@ export default function JobsPage() {
         </div>
         {canCreate && (
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowDiscover(!showDiscover)}
+              className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              style={{
+                borderColor: showDiscover ? "var(--primary)" : "var(--border)",
+                color: showDiscover ? "var(--primary)" : undefined,
+              }}
+            >
+              <Search className="h-4 w-4" />
+              Discover Jobs
+            </button>
             <button
               onClick={() => setShowImportModal(true)}
               className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
@@ -705,6 +755,118 @@ export default function JobsPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Discover Jobs Panel */}
+      {showDiscover && (
+        <div
+          className="rounded-xl border p-6"
+          style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Search className="h-4 w-4" style={{ color: "var(--primary)" }} />
+            <h2 className="font-semibold">Discover Jobs</h2>
+            <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+              AI-powered search suggestions based on your profile
+            </span>
+          </div>
+          <div className="flex gap-3 mb-4">
+            <input
+              type="text"
+              value={discoverQuery}
+              onChange={(e) => setDiscoverQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runDiscover()}
+              placeholder="Job title, keywords, or skills..."
+              className="flex-1 rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+              style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+            />
+            <input
+              type="text"
+              value={discoverLocation}
+              onChange={(e) => setDiscoverLocation(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runDiscover()}
+              placeholder="Location (optional)"
+              className="w-48 rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+              style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+            />
+            <button
+              onClick={runDiscover}
+              disabled={discovering}
+              className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+              style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+            >
+              {discovering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              Search
+            </button>
+          </div>
+
+          {discovering && (
+            <div className="flex items-center gap-2 py-8 justify-center">
+              <Loader2 className="h-5 w-5 animate-spin" style={{ color: "var(--primary)" }} />
+              <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                Generating search suggestions from your profile...
+              </span>
+            </div>
+          )}
+
+          {discoverResult && !discovering && (
+            <div className="space-y-4">
+              {/* Suggestions */}
+              <div>
+                <h3 className="text-sm font-medium mb-2">Search Strategies</h3>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {discoverResult.suggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setActiveSuggestionIdx(i);
+                        updateBoardLinks(s.keywords);
+                      }}
+                      className={`text-left rounded-lg border p-3 transition-colors ${
+                        i === activeSuggestionIdx ? "ring-1 ring-ring" : "hover:bg-accent/50"
+                      }`}
+                      style={{
+                        borderColor: i === activeSuggestionIdx ? "var(--primary)" : "var(--border)",
+                        backgroundColor: i === activeSuggestionIdx ? "rgba(59,130,246,0.05)" : undefined,
+                      }}
+                    >
+                      <p className="font-medium text-sm">{s.title}</p>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
+                        {s.rationale}
+                      </p>
+                      <p className="text-xs mt-1 font-mono" style={{ color: "var(--primary)" }}>
+                        {s.keywords}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Board links */}
+              <div>
+                <h3 className="text-sm font-medium mb-2">Search on Job Boards</h3>
+                <div className="flex flex-wrap gap-2">
+                  {discoverResult.search_links.map((link) => (
+                    <a
+                      key={link.board}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      {link.board}
+                    </a>
+                  ))}
+                </div>
+                <p className="text-xs mt-2" style={{ color: "var(--muted-foreground)" }}>
+                  Found a job? Use "Import from URL" to add it to your listings.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

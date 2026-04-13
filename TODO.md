@@ -23,10 +23,10 @@
 - [ ] NeMo Guardrails AI safety testing suite
 
 ## Low Priority
-- [ ] Add job search capability (active job discovery)
-- [ ] Add analytics dashboard for job search trends
-- [ ] Add export functionality for applications data
+- [x] Add job search capability (active job discovery)
+- [x] Add analytics dashboard for job search trends
+- [x] Add export functionality for applications data
 - [ ] Add multi-language support
-- [ ] Implement AI fallback model configuration
+- [x] Implement AI fallback model configuration
 - [ ] Add Terraform infrastructure for Azure deployment
-- [ ] Security scanner integration
+- [x] Security scanner integration

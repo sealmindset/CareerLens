@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     # AI Provider -- which provider is active
     AI_PROVIDER: str = "anthropic_foundry"
+    AI_FALLBACK_PROVIDER: str = ""  # e.g. "anthropic" — tried when primary fails
 
     # Azure AI Foundry (when AI_PROVIDER=anthropic_foundry)
     AZURE_AI_FOUNDRY_ENDPOINT: str = ""

@@ -180,6 +180,9 @@ export default function AgentsPage() {
   const [showConvoSidebar, setShowConvoSidebar] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Export state
+  const [exporting, setExporting] = useState(false);
+
   // Workspace state
   const [jobListings, setJobListings] = useState<JobListing[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -225,6 +228,18 @@ export default function AgentsPage() {
       artifactViewerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [selectedArtifact]);
+
+  const handleExportCsv = async () => {
+    setExporting(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      await apiDownload("/applications/export?format=csv", `applications_${today}.csv`);
+    } catch {
+      // silent — apiDownload throws on failure
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleDownload = async (format: "pdf" | "docx") => {
     if (!workspace || !selectedArtifact) return;
@@ -691,11 +706,25 @@ export default function AgentsPage() {
   if (viewMode === "workspace") {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Application Studio</h1>
-          <p style={{ color: "var(--muted-foreground)" }}>
-            Select a job listing and let AI agents craft your application — tailored resume, cover letter, interview prep, and more.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Application Studio</h1>
+            <p style={{ color: "var(--muted-foreground)" }}>
+              Select a job listing and let AI agents craft your application — tailored resume, cover letter, interview prep, and more.
+            </p>
+          </div>
+          {applications.length > 0 && (
+            <button
+              onClick={handleExportCsv}
+              disabled={exporting}
+              className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50 shrink-0"
+              style={{ borderColor: "var(--border)" }}
+              title="Export all applications as CSV"
+            >
+              {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              Export CSV
+            </button>
+          )}
         </div>
 
         {/* Job listing selector */}

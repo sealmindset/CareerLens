@@ -1,6 +1,10 @@
+import json
+import logging
 import uuid
+from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +12,7 @@ from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.middleware.permissions import require_permission
 from app.models.job import JobListing
+from app.models.profile import Profile
 from app.models.user import User
 from app.schemas.auth import UserInfo
 from app.schemas.job import (
@@ -19,6 +24,8 @@ from app.schemas.job import (
 )
 from app.services.application_detector import detect_application_method
 from app.services.job_scraper import scrape_job_url
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -149,6 +156,172 @@ async def import_job(
     await db.commit()
     await db.refresh(job)
     return job
+
+
+class DiscoverRequest(BaseModel):
+    query: str = ""
+    location: str = ""
+
+
+class SearchSuggestion(BaseModel):
+    title: str
+    keywords: str
+    rationale: str
+
+
+class BoardLink(BaseModel):
+    board: str
+    url: str
+
+
+class DiscoverResult(BaseModel):
+    suggestions: list[SearchSuggestion]
+    search_links: list[BoardLink]
+
+
+def _build_board_links(keywords: str, location: str) -> list[BoardLink]:
+    """Generate direct search URLs for popular job boards."""
+    kw = quote_plus(keywords)
+    loc = quote_plus(location) if location else ""
+    links = []
+
+    if loc:
+        links.append(BoardLink(
+            board="LinkedIn",
+            url=f"https://www.linkedin.com/jobs/search/?keywords={kw}&location={loc}",
+        ))
+        links.append(BoardLink(
+            board="Indeed",
+            url=f"https://www.indeed.com/jobs?q={kw}&l={loc}",
+        ))
+        links.append(BoardLink(
+            board="Glassdoor",
+            url=f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={kw}&locT=C&locKeyword={loc}",
+        ))
+    else:
+        links.append(BoardLink(
+            board="LinkedIn",
+            url=f"https://www.linkedin.com/jobs/search/?keywords={kw}",
+        ))
+        links.append(BoardLink(
+            board="Indeed",
+            url=f"https://www.indeed.com/jobs?q={kw}",
+        ))
+        links.append(BoardLink(
+            board="Glassdoor",
+            url=f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={kw}",
+        ))
+
+    links.append(BoardLink(
+        board="Google Jobs",
+        url=f"https://www.google.com/search?q={kw}+jobs" + (f"+{loc}" if loc else ""),
+    ))
+
+    return links
+
+
+@router.post("/discover", response_model=DiscoverResult)
+async def discover_jobs(
+    data: DiscoverRequest,
+    current_user: UserInfo = Depends(require_permission("jobs", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate AI-powered job search suggestions based on profile and query."""
+    from app.ai.provider import get_ai_provider, get_model_for_tier
+
+    user_id = await _get_user_id(db, current_user)
+
+    # Load profile for context
+    profile_result = await db.execute(
+        select(Profile).where(Profile.user_id == user_id)
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    profile_context = ""
+    if profile:
+        parts = []
+        if profile.headline:
+            parts.append(f"Headline: {profile.headline}")
+        if profile.summary:
+            parts.append(f"Summary: {profile.summary[:300]}")
+        if profile.skills:
+            skill_names = [s.skill_name for s in profile.skills[:15]]
+            parts.append(f"Skills: {', '.join(skill_names)}")
+        if profile.experiences:
+            recent = profile.experiences[:3]
+            exp_lines = [f"- {e.title} at {e.company}" for e in recent]
+            parts.append("Recent Experience:\n" + "\n".join(exp_lines))
+        profile_context = "\n".join(parts)
+
+    system_prompt = (
+        "You are a job search strategist. Given a user's professional profile and optional "
+        "search query, suggest 3-5 targeted job search strategies.\n\n"
+        "For each suggestion, provide:\n"
+        "- title: A short name for the search angle (e.g. 'Senior Backend Engineer')\n"
+        "- keywords: The exact keywords to search on job boards\n"
+        "- rationale: One sentence explaining why this search targets good opportunities\n\n"
+        "Return JSON array only, no markdown:\n"
+        '[{"title":"...","keywords":"...","rationale":"..."}]'
+    )
+
+    user_prompt_parts = []
+    if profile_context:
+        user_prompt_parts.append(f"## Profile\n{profile_context}")
+    if data.query:
+        user_prompt_parts.append(f"## Search Query\n{data.query}")
+    if data.location:
+        user_prompt_parts.append(f"## Preferred Location\n{data.location}")
+    if not data.query and not profile_context:
+        user_prompt_parts.append("No profile or query provided. Suggest general tech job searches.")
+
+    user_prompt = "\n\n".join(user_prompt_parts)
+
+    try:
+        ai = get_ai_provider()
+        model = get_model_for_tier("light")
+        raw = await ai.complete(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=model,
+            temperature=0.7,
+            max_tokens=1024,
+        )
+
+        # Parse JSON from AI response
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+        suggestions_data = json.loads(cleaned)
+        suggestions = [
+            SearchSuggestion(
+                title=s.get("title", ""),
+                keywords=s.get("keywords", ""),
+                rationale=s.get("rationale", ""),
+            )
+            for s in suggestions_data[:5]
+        ]
+    except Exception as exc:
+        logger.warning("AI discover failed (%s), using fallback", exc)
+        # Fallback: generate basic suggestions from profile
+        fallback_title = "General Job Search"
+        fallback_keywords = data.query or "software engineer"
+        if profile and profile.headline:
+            fallback_title = profile.headline[:50]
+            fallback_keywords = profile.headline
+        suggestions = [
+            SearchSuggestion(
+                title=fallback_title,
+                keywords=fallback_keywords,
+                rationale="Based on your profile headline",
+            )
+        ]
+
+    # Generate board links for the first suggestion's keywords
+    primary_keywords = suggestions[0].keywords if suggestions else data.query or "software engineer"
+    search_links = _build_board_links(primary_keywords, data.location)
+
+    return DiscoverResult(suggestions=suggestions, search_links=search_links)
 
 
 @router.get("/{job_id}", response_model=JobListingOut)

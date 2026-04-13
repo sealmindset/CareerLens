@@ -1,7 +1,10 @@
+import csv
+import io
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -96,6 +99,63 @@ async def create_application(
     await db.commit()
     await db.refresh(application)
     return application
+
+
+@router.get("/export")
+async def export_applications(
+    format: str = Query("csv", pattern="^csv$"),
+    current_user: UserInfo = Depends(require_permission("applications", "view")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export all applications as CSV."""
+    user_id = await _get_user_id(db, current_user)
+    query = (
+        select(Application)
+        .where(Application.user_id == user_id)
+        .order_by(Application.created_at.desc())
+    )
+    result = await db.execute(query)
+    apps = [_enrich_application(app) for app in result.scalars().all()]
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    headers = [
+        "Job Title",
+        "Company",
+        "Status",
+        "Submitted At",
+        "Follow-Up Date",
+        "Resume Variant",
+        "Resume Type",
+        "Submission Mode",
+        "Notes",
+        "Created At",
+        "Updated At",
+    ]
+    writer.writerow(headers)
+
+    for app in apps:
+        writer.writerow([
+            app.get("job_title") or "",
+            app.get("job_company") or "",
+            app.get("status") or "",
+            str(app.get("submitted_at") or ""),
+            str(app.get("follow_up_date") or ""),
+            app.get("resume_variant_name") or "",
+            app.get("resume_type") or "",
+            app.get("submission_mode") or "",
+            app.get("notes") or "",
+            str(app.get("created_at") or ""),
+            str(app.get("updated_at") or ""),
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=applications.csv"},
+    )
 
 
 @router.get("/{app_id}", response_model=ApplicationOut)

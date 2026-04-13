@@ -35,6 +35,12 @@ test.describe("Sidebar navigation - Admin", () => {
     await expect(page).toHaveURL(/stories/);
   });
 
+  test("navigate to Analytics", async ({ page }) => {
+    await page.click("text=Analytics");
+    await expect(page).toHaveURL(/analytics/);
+    await expect(page.locator("h1")).toContainText(/analytics/i);
+  });
+
   test("admin can see AI Instructions link", async ({ page }) => {
     await expect(page.locator("text=AI Instructions")).toBeVisible();
     await page.click("text=AI Instructions");

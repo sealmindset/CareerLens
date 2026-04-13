@@ -240,6 +240,40 @@ export interface DashboardStats {
   recent_activity: number;
 }
 
+// Analytics types
+export interface StatusCount {
+  status: string;
+  count: number;
+}
+
+export interface WeeklyCount {
+  week: string;
+  applications: number;
+  jobs: number;
+}
+
+export interface CompanyCount {
+  company: string;
+  count: number;
+}
+
+export interface MatchBucket {
+  range: string;
+  count: number;
+}
+
+export interface AnalyticsTrends {
+  status_funnel: StatusCount[];
+  weekly_activity: WeeklyCount[];
+  top_companies: CompanyCount[];
+  match_distribution: MatchBucket[];
+  total_applications: number;
+  total_jobs: number;
+  avg_match_score: number | null;
+  interview_rate: number;
+  offer_rate: number;
+}
+
 // Workspace types
 export interface WorkspaceArtifact {
   id: string;
@@ -514,6 +548,23 @@ export interface PropagateApplyResponse {
   profile_updated: boolean;
   variant_change_summary: string | null;
   profile_change_summary: string | null;
+}
+
+// Job discovery types
+export interface SearchSuggestion {
+  title: string;
+  keywords: string;
+  rationale: string;
+}
+
+export interface BoardLink {
+  board: string;
+  url: string;
+}
+
+export interface DiscoverResult {
+  suggestions: SearchSuggestion[];
+  search_links: BoardLink[];
 }
 
 // Notification types

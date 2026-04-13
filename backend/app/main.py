@@ -5,6 +5,7 @@ from app.config import settings
 from app.routers import auth, permissions, roles, users, prompts
 from app.routers import profile, jobs, applications, agents, dashboard
 from app.routers import resume_variants, story_bank, notifications
+from app.routers import analytics, security_scan
 from app.routers import settings as settings_router
 
 app = FastAPI(title="career-lens", version="0.1.0")
@@ -45,4 +46,6 @@ app.include_router(dashboard.router)
 app.include_router(resume_variants.router)
 app.include_router(story_bank.router)
 app.include_router(notifications.router)
+app.include_router(analytics.router)
+app.include_router(security_scan.router)
 app.include_router(settings_router.router)

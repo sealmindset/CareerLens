@@ -18,6 +18,8 @@ import {
   UserCircle,
   MessageSquareCode,
   SlidersHorizontal,
+  BarChart3,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -65,6 +67,12 @@ const mainNavItems: NavItem[] = [
     icon: BookOpen,
     permission: { resource: "stories", action: "view" },
   },
+  {
+    label: "Analytics",
+    href: "/analytics",
+    icon: BarChart3,
+    permission: { resource: "dashboard", action: "view" },
+  },
 ];
 
 const adminNavItems: NavItem[] = [
@@ -90,6 +98,12 @@ const adminNavItems: NavItem[] = [
     label: "Settings",
     href: "/admin/settings",
     icon: SlidersHorizontal,
+    permission: { resource: "app_settings", action: "view" },
+  },
+  {
+    label: "Security",
+    href: "/admin/security",
+    icon: ShieldCheck,
     permission: { resource: "app_settings", action: "view" },
   },
 ];
