@@ -445,7 +445,7 @@ export default function ResumesPage() {
               <p className="text-xs text-muted-foreground mb-3">{v.usage_guidance}</p>
             )}
             <div className="flex items-center gap-1 text-xs text-muted-foreground mb-3">
-              <span>v{v.current_version}</span>
+              <span>{v.current_version > 0 ? `v${v.current_version}` : "Draft"}</span>
               <span>·</span>
               <span>{v.headline ? "Content loaded" : "No content yet"}</span>
             </div>

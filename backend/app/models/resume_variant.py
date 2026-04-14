@@ -41,7 +41,7 @@ class ResumeVariant(Base):
     educations: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     certifications: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     additional_sections: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    current_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    current_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

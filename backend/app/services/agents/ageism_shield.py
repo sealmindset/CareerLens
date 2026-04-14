@@ -297,10 +297,13 @@ Experience compensates for formal education. The resume should let accomplishmen
 ## CRITICAL RULES
 
 ### Date Management
-- Keep ONLY the last 10-15 years of experience with full dates
-- Roles older than 15 years: consolidate into a one-line "Earlier Career" section at the bottom of experience: "Previously held roles at [Company], [Company], and [Company] in [general domain]." — NO dates, NO titles, NO bullets
+- Keep ONLY roles from {CUTOFF_YEAR} or later with full dates
+- ALL roles before {CUTOFF_YEAR} MUST be completely removed from their current location and collapsed into a SINGLE "Earlier Career" line at the bottom of the experience section
+- The "Earlier Career" line format: "Earlier Career: [Title] — [Company], [Title] — [Company], [Title] — [Company]." — NO DATES whatsoever, NO bullets, NO descriptions, just title-company pairs separated by commas
+- NEVER include year numbers (like 2005, 1997, 1992, 1985) in the Earlier Career line or anywhere for old roles
 - Remove ALL graduation dates, attendance dates, or year references from education
 - Remove certification dates older than 10 years (keep the certification itself)
+- If the resume already has an "Earlier Career" section with dates, STRIP ALL DATES from it
 
 ### Education Section
 - Place at the BOTTOM of the resume (after Experience, Skills, Certifications)
@@ -391,6 +394,17 @@ async def run_ageism_shield(
 ## Job Target
 
 {context.job.title} at {context.job.company}
+
+## MANDATORY DATE SCRUBBING RULES
+
+The cutoff year is {CUTOFF_YEAR}. Any role that started OR ended before {CUTOFF_YEAR} MUST be:
+1. REMOVED from the detailed experience section entirely (no bullets, no descriptions)
+2. Collapsed into a SINGLE "Earlier Career" line at the bottom of experience
+3. Format: "Earlier Career: [Title] — [Company], [Title] — [Company]."
+4. ZERO dates in the Earlier Career line — no years, no date ranges, no parenthetical dates
+5. If the original resume says "Senior Security Consultant — Company (2005 – 2007)", the Earlier Career line says ONLY "Senior Security Consultant — Company" with NO "(2005 – 2007)"
+
+Scan the ENTIRE output before returning it. If ANY year number before {CUTOFF_YEAR} appears ANYWHERE in your output, you have FAILED. Remove it.
 
 ## HOLISTIC VIBE CHECK
 
