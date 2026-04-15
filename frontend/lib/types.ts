@@ -656,6 +656,45 @@ export interface MeetingPrepData {
   missing_sections: string[];
 }
 
+// Task System types
+export interface Task {
+  id: string;
+  user_id: string;
+  application_id: string | null;
+  source_type: string;
+  source_id: string | null;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  due_date: string | null;
+  due_reason: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuickCapture {
+  id: string;
+  user_id: string;
+  raw_text: string;
+  processed: boolean;
+  processed_at: string | null;
+  ai_summary: string | null;
+  extracted_tasks: Record<string, unknown> | null;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  created_at: string;
+}
+
+export interface QuickCaptureProcessResult {
+  capture: QuickCapture;
+  classification: string;
+  tasks_created: Task[];
+  event_created: Event | null;
+  summary: string | null;
+}
+
 // AI Safety Testing types
 export interface SafetyTestResult {
   id: string;

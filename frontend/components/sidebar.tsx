@@ -7,11 +7,9 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  LayoutDashboard,
   Users,
   Shield,
   Briefcase,
-  FileText,
   FileStack,
   Bot,
   CalendarClock,
@@ -35,9 +33,10 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
+    label: "Command Center",
+    href: "/command-center",
+    icon: CalendarClock,
+    permission: { resource: "events", action: "view" },
   },
   {
     label: "My Profile",
@@ -62,12 +61,6 @@ const mainNavItems: NavItem[] = [
     href: "/agents",
     icon: Bot,
     permission: { resource: "agents", action: "view" },
-  },
-  {
-    label: "Command Center",
-    href: "/command-center",
-    icon: CalendarClock,
-    permission: { resource: "events", action: "view" },
   },
   {
     label: "Story Bank",

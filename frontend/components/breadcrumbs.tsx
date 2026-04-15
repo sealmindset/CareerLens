@@ -6,13 +6,12 @@ import { ChevronRight, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const segmentLabels: Record<string, string> = {
-  dashboard: "Dashboard",
+  "command-center": "Command Center",
   profile: "My Profile",
   resumes: "Resumes",
   jobs: "Job Listings",
   agents: "Application Studio",
   stories: "Story Bank",
-  "command-center": "Command Center",
   prep: "Meeting Prep",
   settings: "Settings",
   admin: "Admin",
@@ -51,7 +50,7 @@ export function Breadcrumbs() {
   return (
     <nav aria-label="Breadcrumb" className="flex items-center text-sm">
       <Link
-        href="/dashboard"
+        href="/command-center"
         className="text-muted-foreground transition-colors hover:text-foreground"
       >
         <Home className="h-4 w-4" />

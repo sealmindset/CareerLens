@@ -2,7 +2,7 @@ import { type Page } from "@playwright/test";
 
 /**
  * Login via mock-oidc by navigating to /api/auth/login, picking a user on the
- * mock-oidc form, and waiting for the redirect back to /dashboard.
+ * mock-oidc form, and waiting for the redirect back to /command-center.
  */
 export async function login(page: Page, userSub: string = "mock-admin") {
   // Navigate to the login endpoint — redirects to mock-oidc
@@ -11,8 +11,8 @@ export async function login(page: Page, userSub: string = "mock-admin") {
   // Mock-oidc shows a form with buttons per user. Click the right one.
   await page.click(`button[value="${userSub}"]`);
 
-  // Wait for redirect back to the app (callback → dashboard)
-  await page.waitForURL("**/dashboard", { timeout: 15_000 });
+  // Wait for redirect back to the app (callback → command-center)
+  await page.waitForURL("**/command-center", { timeout: 15_000 });
 }
 
 /**

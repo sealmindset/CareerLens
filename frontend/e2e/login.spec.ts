@@ -11,7 +11,7 @@ test.describe("Login flow", () => {
 
   test("Super Admin can login via mock-oidc", async ({ page }) => {
     await loginAsAdmin(page);
-    await expect(page).toHaveURL(/dashboard/);
+    await expect(page).toHaveURL(/command-center/);
     // Sidebar shows exact user name
     await expect(page.getByText("Admin User", { exact: true })).toBeVisible();
     await expect(page.getByText("Super Admin")).toBeVisible();
@@ -19,7 +19,7 @@ test.describe("Login flow", () => {
 
   test("Regular User can login via mock-oidc", async ({ page }) => {
     await loginAsUser(page);
-    await expect(page).toHaveURL(/dashboard/);
+    await expect(page).toHaveURL(/command-center/);
     await expect(page.getByText("Regular User", { exact: true })).toBeVisible();
   });
 

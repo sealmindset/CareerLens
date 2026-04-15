@@ -6,8 +6,8 @@ test.describe("Sidebar navigation - Admin", () => {
     await loginAsAdmin(page);
   });
 
-  test("dashboard loads", async ({ page }) => {
-    await expect(page.locator("h1")).toContainText(/dashboard/i);
+  test("command center loads", async ({ page }) => {
+    await expect(page.locator("h1")).toContainText(/command center/i);
   });
 
   test("navigate to My Profile", async ({ page }) => {
@@ -70,7 +70,7 @@ test.describe("Sidebar navigation - User (restricted)", () => {
   });
 
   test("user can see basic navigation", async ({ page }) => {
-    await expect(page.locator("a >> text=Dashboard")).toBeVisible();
+    await expect(page.locator("a >> text=Command Center")).toBeVisible();
     await expect(page.locator("a >> text=My Profile")).toBeVisible();
     await expect(page.locator("a >> text=Job Listings")).toBeVisible();
   });

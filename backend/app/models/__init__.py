@@ -12,6 +12,8 @@ from app.models.embedding import ProfileChunk
 from app.models.app_setting import AppSetting, AppSettingAuditLog
 from app.models.resume_variant import ResumeVariant, ResumeVariantVersion
 from app.models.event import Event
+from app.models.task import Task
+from app.models.quick_capture import QuickCapture
 
 __all__ = [
     "Base", "User", "Role", "Permission", "RolePermission",
@@ -24,4 +26,5 @@ __all__ = [
     "AppSetting", "AppSettingAuditLog",
     "ResumeVariant", "ResumeVariantVersion",
     "Event",
+    "Task", "QuickCapture",
 ]

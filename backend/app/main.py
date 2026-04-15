@@ -10,6 +10,7 @@ from app.routers import auth, permissions, roles, users, prompts
 from app.routers import profile, jobs, applications, agents, dashboard
 from app.routers import resume_variants, story_bank, notifications, events
 from app.routers import analytics, security_scan, ai_safety
+from app.routers import tasks, quick_captures
 from app.routers import settings as settings_router
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,8 @@ app.include_router(resume_variants.router)
 app.include_router(story_bank.router)
 app.include_router(notifications.router)
 app.include_router(events.router)
+app.include_router(tasks.router)
+app.include_router(quick_captures.router)
 app.include_router(analytics.router)
 app.include_router(security_scan.router)
 app.include_router(ai_safety.router)

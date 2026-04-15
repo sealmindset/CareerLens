@@ -14,7 +14,7 @@ interface SearchItem {
 }
 
 const navigationItems: SearchItem[] = [
-  { label: "Dashboard", href: "/dashboard", keywords: ["home", "overview", "stats"] },
+  { label: "Command Center", href: "/command-center", keywords: ["home", "overview", "events", "calendar", "meetings", "interviews", "jarvis", "notes", "tasks", "captures"] },
   {
     label: "My Profile",
     href: "/profile",
@@ -38,12 +38,6 @@ const navigationItems: SearchItem[] = [
     href: "/agents",
     keywords: ["applications", "studio", "agents", "ai", "scout", "tailor", "coach", "strategist", "pipeline", "workspace"],
     permission: { resource: "agents", action: "view" },
-  },
-  {
-    label: "Command Center",
-    href: "/command-center",
-    keywords: ["events", "calendar", "meetings", "interviews", "jarvis", "notes", "prep", "schedule", "command"],
-    permission: { resource: "events", action: "view" },
   },
   {
     label: "Story Bank",

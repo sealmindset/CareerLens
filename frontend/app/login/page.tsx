@@ -14,7 +14,7 @@ export default function LoginPage() {
     // Check for existing session -- if already logged in, redirect to dashboard
     apiGet<AuthMe>("/auth/me")
       .then(() => {
-        router.replace("/dashboard");
+        router.replace("/command-center");
       })
       .catch((err) => {
         // 401 is expected when not logged in -- show login UI
