@@ -44,11 +44,25 @@ _HTTP_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
+        "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"macOS"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
+
+# Domains that aggressively block simple HTTP requests and need Playwright
+_JS_RENDER_DOMAINS = {"indeed.com", "glassdoor.com"}
 
 
 def detect_source(url: str) -> str:
@@ -84,18 +98,66 @@ def _get_ssl_context() -> ssl.SSLContext | bool:
     return False
 
 
-async def fetch_page_text(url: str) -> str:
-    """Fetch a job listing page and extract visible text using httpx + BeautifulSoup."""
-    async with httpx.AsyncClient(
-        timeout=30,
-        follow_redirects=True,
-        headers=_HTTP_HEADERS,
-        verify=_get_ssl_context(),
-    ) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
+def _needs_js_render(url: str) -> bool:
+    """Check if this domain requires a real browser to bypass bot protection."""
+    try:
+        domain = urlparse(url).hostname or ""
+        return any(d in domain for d in _JS_RENDER_DOMAINS)
+    except Exception:
+        return False
 
-    soup = BeautifulSoup(resp.text, "html.parser")
+
+async def _fetch_with_playwright(url: str) -> str:
+    """Fetch page content using Playwright for sites that block simple HTTP."""
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        raise RuntimeError("Playwright not installed — cannot scrape JS-rendered sites")
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent=_HTTP_HEADERS["User-Agent"],
+            viewport={"width": 1920, "height": 1080},
+            locale="en-US",
+        )
+        page = await context.new_page()
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            # Wait for job content to render
+            await page.wait_for_timeout(3000)
+            html = await page.content()
+        finally:
+            await browser.close()
+    return html
+
+
+async def fetch_page_text(url: str) -> str:
+    """Fetch a job listing page and extract visible text.
+
+    Uses Playwright for sites that block simple HTTP (Indeed, Glassdoor).
+    Falls back to httpx + BeautifulSoup for everything else.
+    """
+    html = None
+
+    if _needs_js_render(url):
+        try:
+            html = await _fetch_with_playwright(url)
+        except Exception as e:
+            logger.warning("Playwright fetch failed for %s: %s — falling back to httpx", url, e)
+
+    if html is None:
+        async with httpx.AsyncClient(
+            timeout=30,
+            follow_redirects=True,
+            headers=_HTTP_HEADERS,
+            verify=_get_ssl_context(),
+        ) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+        html = resp.text
+
+    soup = BeautifulSoup(html, "html.parser")
 
     # Remove non-content elements
     for tag in soup(["script", "style", "nav", "footer", "header", "iframe", "noscript"]):
