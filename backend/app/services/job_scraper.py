@@ -2,7 +2,7 @@ import json
 import logging
 import re
 import ssl
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -65,6 +65,28 @@ _HTTP_HEADERS = {
 _JS_RENDER_DOMAINS = {"indeed.com", "glassdoor.com"}
 
 
+def _normalize_indeed_url(url: str) -> str:
+    """Convert Indeed search/home URLs with vjk param to direct job view URLs.
+
+    Indeed often shares jobs as homepage links with ?vjk=<job_key> which renders
+    in a JS overlay.  The /viewjob?jk=<key> URL is a dedicated page that
+    Playwright can actually scrape.
+    """
+    parsed = urlparse(url)
+    if "indeed.com" not in (parsed.hostname or ""):
+        return url
+    # Already a viewjob URL
+    if "/viewjob" in parsed.path:
+        return url
+    qs = parse_qs(parsed.query)
+    vjk = qs.get("vjk", [None])[0]
+    if vjk:
+        scheme = parsed.scheme or "https"
+        host = parsed.hostname or "www.indeed.com"
+        return f"{scheme}://{host}/viewjob?jk={vjk}"
+    return url
+
+
 def detect_source(url: str) -> str:
     """Detect the job board source from the URL domain."""
     try:
@@ -124,8 +146,21 @@ async def _fetch_with_playwright(url: str) -> str:
         page = await context.new_page()
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            # Wait for job content to render
-            await page.wait_for_timeout(3000)
+            # Wait for job content to render — try known selectors first
+            for selector in [
+                "#jobDescriptionText",       # Indeed
+                ".jobsearch-JobComponent",   # Indeed alt
+                "[data-testid='job-content']",  # Glassdoor
+                ".job-description",          # Generic
+            ]:
+                try:
+                    await page.wait_for_selector(selector, timeout=5000)
+                    break
+                except Exception:
+                    continue
+            else:
+                # No known selector found — wait for general content
+                await page.wait_for_timeout(4000)
             html = await page.content()
         finally:
             await browser.close()
@@ -203,6 +238,8 @@ async def extract_job_details(page_text: str) -> dict:
 
 async def scrape_job_url(url: str) -> dict:
     """Full pipeline: fetch page -> AI extract -> return structured data."""
+    # Normalize Indeed URLs (vjk param -> /viewjob direct link)
+    url = _normalize_indeed_url(url)
     try:
         page_text = await fetch_page_text(url)
     except httpx.HTTPStatusError as e:
@@ -211,6 +248,7 @@ async def scrape_job_url(url: str) -> dict:
         logger.error("Page fetch failed: %s", str(e))
         return {"error": "Could not access the page. Check the URL and try again."}
 
+    logger.info("Scraped %d chars from %s", len(page_text), url)
     if not page_text or len(page_text.strip()) < 50:
         return {"error": "Could not extract content from the page"}
 
