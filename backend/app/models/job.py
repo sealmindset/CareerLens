@@ -15,7 +15,7 @@ job_type_enum = sa.Enum(
 )
 
 job_source_enum = sa.Enum(
-    "linkedin", "indeed", "glassdoor", "company_site", "manual",
+    "linkedin", "indeed", "glassdoor", "company_site", "manual", "recruiter", "referral",
     name="job_source",
     create_type=True,
 )
@@ -44,8 +44,9 @@ class JobListing(Base):
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     company: Mapped[str] = mapped_column(String(255), nullable=False)
-    url: Mapped[str] = mapped_column(String(2000), nullable=False)
+    url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     salary_range: Mapped[str | None] = mapped_column(String(255), nullable=True)
     job_type: Mapped[str | None] = mapped_column(job_type_enum, nullable=True)
@@ -71,7 +72,13 @@ class JobListing(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("user_id", "url", name="uq_job_listing_user_url"),
+        # Partial unique: only enforce when url is not null
+        sa.Index(
+            "uq_job_listing_user_url",
+            "user_id", "url",
+            unique=True,
+            postgresql_where=sa.text("url IS NOT NULL"),
+        ),
     )
 
     # Relationships

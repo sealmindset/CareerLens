@@ -61,21 +61,22 @@ async def create_job(
     current_user: UserInfo = Depends(require_permission("jobs", "create")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new job listing (from URL)."""
+    """Create a new job listing (from URL or manual entry)."""
     user_id = await _get_user_id(db, current_user)
 
-    # Check for duplicate URL for this user
-    existing = await db.execute(
-        select(JobListing).where(
-            JobListing.user_id == user_id,
-            JobListing.url == data.url,
+    # Check for duplicate URL for this user (skip if no URL)
+    if data.url:
+        existing = await db.execute(
+            select(JobListing).where(
+                JobListing.user_id == user_id,
+                JobListing.url == data.url,
+            )
         )
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Job listing with this URL already exists",
-        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Job listing with this URL already exists",
+            )
 
     job = JobListing(user_id=user_id, **data.model_dump())
     db.add(job)

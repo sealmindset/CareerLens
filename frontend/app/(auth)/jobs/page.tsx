@@ -90,6 +90,7 @@ export default function JobsPage() {
   const [addDescription, setAddDescription] = useState("");
   const [addLocation, setAddLocation] = useState("");
   const [addSource, setAddSource] = useState("");
+  const [addNotes, setAddNotes] = useState("");
   const [addSaving, setAddSaving] = useState(false);
 
   // Scrape state
@@ -177,12 +178,13 @@ export default function JobsPage() {
     setAddSaving(true);
     try {
       await apiPost("/jobs", {
-        url: addUrl,
+        url: addUrl || null,
         title: addTitle || null,
         company: addCompany || null,
         description: addDescription || null,
         location: addLocation || null,
         source: addSource || "manual",
+        notes: addNotes || null,
       });
       setShowAddModal(false);
       resetAddForm();
@@ -218,6 +220,7 @@ export default function JobsPage() {
     setAddDescription("");
     setAddLocation("");
     setAddSource("");
+    setAddNotes("");
     setScraped(false);
     setScrapeError("");
   };
@@ -528,7 +531,7 @@ export default function JobsPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium mb-1">Job URL *</label>
+                <label className="block text-sm font-medium mb-1">Job URL <span className="text-muted-foreground font-normal">(optional for recruiter/referral)</span></label>
                 <div className="relative">
                   <input
                     type="url"
@@ -615,17 +618,23 @@ export default function JobsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Source</label>
-                <input
-                  type="text"
+                <select
                   value={addSource}
                   onChange={(e) => setAddSource(e.target.value)}
-                  placeholder="e.g. LinkedIn, Indeed"
                   className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
                   style={{
                     backgroundColor: "var(--background)",
                     borderColor: "var(--border)",
                   }}
-                />
+                >
+                  <option value="">Manual</option>
+                  <option value="recruiter">Recruiter</option>
+                  <option value="referral">Referral</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="indeed">Indeed</option>
+                  <option value="glassdoor">Glassdoor</option>
+                  <option value="company_site">Company Site</option>
+                </select>
               </div>
               {addDescription && (
                 <div>
@@ -642,6 +651,20 @@ export default function JobsPage() {
                   />
                 </div>
               )}
+              <div>
+                <label className="block text-sm font-medium mb-1">Notes</label>
+                <textarea
+                  value={addNotes}
+                  onChange={(e) => setAddNotes(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Recruiter name, scheduling link, context..."
+                  className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring resize-y"
+                  style={{
+                    backgroundColor: "var(--background)",
+                    borderColor: "var(--border)",
+                  }}
+                />
+              </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   onClick={() => setShowAddModal(false)}
@@ -652,7 +675,7 @@ export default function JobsPage() {
                 </button>
                 <button
                   onClick={addJob}
-                  disabled={!addUrl.trim() || addSaving || scraping}
+                  disabled={(!addUrl.trim() && (!addTitle.trim() || !addCompany.trim())) || addSaving || scraping}
                   className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
                   style={{
                     backgroundColor: "var(--primary)",
@@ -933,6 +956,14 @@ export default function JobsPage() {
               <h3 className="text-sm font-medium mb-2">Description</h3>
               <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--muted-foreground)" }}>
                 {expandedJob.description}
+              </p>
+            </div>
+          )}
+          {expandedJob.notes && (
+            <div className="mb-4">
+              <h3 className="text-sm font-medium mb-2">Notes</h3>
+              <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--muted-foreground)" }}>
+                {expandedJob.notes}
               </p>
             </div>
           )}

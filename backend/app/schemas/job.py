@@ -35,7 +35,7 @@ class JobScrapeResult(BaseModel):
 
 
 class JobListingCreate(BaseModel):
-    url: str
+    url: str | None = None
     title: str = ""
     company: str = ""
     description: str | None = None
@@ -43,6 +43,7 @@ class JobListingCreate(BaseModel):
     salary_range: str | None = None
     job_type: str | None = None
     source: str = "manual"
+    notes: str | None = None
 
 
 class JobListingUpdate(BaseModel):
@@ -54,6 +55,7 @@ class JobListingUpdate(BaseModel):
     job_type: str | None = None
     source: str | None = None
     status: str | None = None
+    notes: str | None = None
     application_method: str | None = None
     application_platform: str | None = None
     application_method_details: str | None = None
@@ -66,13 +68,14 @@ class JobListingOut(BaseModel):
     user_id: uuid.UUID
     title: str
     company: str
-    url: str
+    url: str | None = None
     description: str | None = None
     location: str | None = None
     salary_range: str | None = None
     job_type: str | None = None
     source: str
     status: str
+    notes: str | None = None
     match_score: float | None = None
     match_analysis: str | None = None
     application_method: str | None = None

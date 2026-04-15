@@ -131,13 +131,14 @@ export interface JobListing {
   user_id: string;
   title: string;
   company: string;
-  url: string;
+  url: string | null;
   description: string | null;
   location: string | null;
   salary_range: string | null;
   job_type: string;
   source: string;
   status: string;
+  notes: string | null;
   match_score: number | null;
   match_analysis: string | null;
   application_method: string | null;
