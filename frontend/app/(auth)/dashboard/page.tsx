@@ -7,27 +7,38 @@ import { useAuth } from "@/lib/auth";
 import type { DashboardStats } from "@/lib/types";
 import {
   Briefcase,
-  FileText,
   CalendarCheck,
+  CalendarClock,
+  Clock,
+  FileText,
+  Loader2,
+  Plus,
   Trophy,
   TrendingUp,
-  Wrench,
-  Plus,
   UserCircle,
   Bot,
+  Wrench,
 } from "lucide-react";
+import type { Event } from "@/lib/types";
 
 export default function DashboardPage() {
   const { authMe } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
 
   useEffect(() => {
     apiGet<DashboardStats>("/dashboard")
       .then(setStats)
       .catch((err) => console.error("Failed to load dashboard:", err))
       .finally(() => setLoading(false));
+
+    apiGet<Event[]>("/events/upcoming?limit=3")
+      .then(setUpcomingEvents)
+      .catch(() => {})
+      .finally(() => setEventsLoading(false));
   }, []);
 
   const statCards = stats
@@ -172,6 +183,79 @@ export default function DashboardPage() {
               <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                 No recent activity. Start by adding a job or updating your profile.
               </p>
+            )}
+          </div>
+
+          {/* Upcoming Events */}
+          <div
+            className="rounded-xl border p-6"
+            style={{
+              backgroundColor: "var(--card)",
+              borderColor: "var(--border)",
+              color: "var(--card-foreground)",
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <CalendarClock className="h-5 w-5 text-primary" />
+                Upcoming Events
+              </h2>
+              <button
+                onClick={() => router.push("/command-center")}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                View all
+              </button>
+            </div>
+            {eventsLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : upcomingEvents.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                No upcoming events. Use the Command Center to create one.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {upcomingEvents.map((event) => (
+                  <button
+                    key={event.id}
+                    onClick={() => router.push(`/command-center/${event.id}/prep`)}
+                    className="flex w-full items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-accent/50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{event.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {event.scheduled_at
+                          ? new Date(event.scheduled_at).toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })
+                          : "Not scheduled"}
+                      </p>
+                    </div>
+                    {event.countdown_display && (
+                      <span className="flex items-center gap-1 shrink-0 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950/30 dark:text-orange-400">
+                        <Clock className="h-3 w-3" />
+                        {event.countdown_display}
+                      </span>
+                    )}
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${
+                        event.prep_status === "ready"
+                          ? "bg-green-500"
+                          : event.prep_status === "in_progress"
+                            ? "bg-yellow-500"
+                            : "bg-red-500"
+                      }`}
+                      title={`Prep: ${event.prep_status}`}
+                    />
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 

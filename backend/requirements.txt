@@ -9,6 +9,7 @@ httpx
 anthropic
 azure-identity
 beautifulsoup4
+python-dateutil
 python-multipart
 PyPDF2
 python-docx

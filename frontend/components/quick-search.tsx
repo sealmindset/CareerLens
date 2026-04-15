@@ -40,6 +40,12 @@ const navigationItems: SearchItem[] = [
     permission: { resource: "agents", action: "view" },
   },
   {
+    label: "Command Center",
+    href: "/command-center",
+    keywords: ["events", "calendar", "meetings", "interviews", "jarvis", "notes", "prep", "schedule", "command"],
+    permission: { resource: "events", action: "view" },
+  },
+  {
     label: "Story Bank",
     href: "/stories",
     keywords: ["stories", "interview", "talking points", "problem", "solved", "deployed", "bank", "reuse"],

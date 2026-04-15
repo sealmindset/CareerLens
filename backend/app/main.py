@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import auth, permissions, roles, users, prompts
 from app.routers import profile, jobs, applications, agents, dashboard
-from app.routers import resume_variants, story_bank, notifications
+from app.routers import resume_variants, story_bank, notifications, events
 from app.routers import analytics, security_scan, ai_safety
 from app.routers import settings as settings_router
 
@@ -37,11 +37,32 @@ async def _follow_up_loop():
         await asyncio.sleep(86400)
 
 
+async def _event_reminder_loop():
+    """Run event reminder check every hour."""
+    from app.database import async_session
+    from app.services.event_reminder import check_upcoming_events
+
+    # Wait 60s on startup so the DB is ready
+    await asyncio.sleep(60)
+    while True:
+        try:
+            async with async_session() as db:
+                created = await check_upcoming_events(db)
+                if created:
+                    logger.info("Event reminder: %d reminders sent", created)
+        except Exception:
+            logger.exception("Event reminder error")
+        # Sleep 1 hour
+        await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(_follow_up_loop())
+    follow_up_task = asyncio.create_task(_follow_up_loop())
+    event_reminder_task = asyncio.create_task(_event_reminder_loop())
     yield
-    task.cancel()
+    follow_up_task.cancel()
+    event_reminder_task.cancel()
 
 
 app = FastAPI(title="career-lens", version="0.1.0", lifespan=lifespan)
@@ -82,6 +103,7 @@ app.include_router(dashboard.router)
 app.include_router(resume_variants.router)
 app.include_router(story_bank.router)
 app.include_router(notifications.router)
+app.include_router(events.router)
 app.include_router(analytics.router)
 app.include_router(security_scan.router)
 app.include_router(ai_safety.router)

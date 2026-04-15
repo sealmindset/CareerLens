@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bell,
   BellOff,
+  Calendar,
   CheckCheck,
   Clock,
   ExternalLink,
@@ -95,6 +96,13 @@ const typeConfigMap: Record<string, TypeConfig> = {
     icon: Clock,
     label: "Follow-up",
   },
+  EVENT_REMINDER: {
+    borderColor: "border-l-teal-500",
+    bgColor: "bg-teal-50 dark:bg-teal-950/30",
+    textColor: "text-teal-700 dark:text-teal-400",
+    icon: Calendar,
+    label: "Event",
+  },
   SYSTEM: {
     borderColor: "border-l-gray-400",
     bgColor: "bg-gray-50 dark:bg-gray-900/30",
@@ -131,6 +139,7 @@ function getEntityRoute(
     story: `/stories`,
     profile: `/profile`,
     variant: `/resumes`,
+    event: `/command-center`,
   };
   return routes[entityType] || null;
 }

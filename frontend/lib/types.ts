@@ -595,6 +595,67 @@ export interface NotificationCountResponse {
   unread_count: number;
 }
 
+// Event / Command Center types
+export interface Event {
+  id: string;
+  user_id: string;
+  application_id: string | null;
+  event_type: string;
+  title: string;
+  scheduled_at: string | null;
+  timezone: string | null;
+  duration_minutes: number;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  meeting_link: string | null;
+  platform: string | null;
+  location: string | null;
+  prep_status: string;
+  raw_note: string | null;
+  notes: string | null;
+  reminder_sent: boolean;
+  created_at: string;
+  updated_at: string;
+  job_title?: string | null;
+  job_company?: string | null;
+  countdown_display?: string | null;
+}
+
+export interface NoteParseResult {
+  contact_name: string | null;
+  contact_email: string | null;
+  role_title: string | null;
+  company: string | null;
+  location: string | null;
+  job_type: string | null;
+  event_type: string | null;
+  scheduled_time: string | null;
+  timezone: string | null;
+  platform: string | null;
+  duration_estimate: string | null;
+  contract_details: string | null;
+  source: string | null;
+  additional_notes: string | null;
+  confidence: Record<string, number>;
+}
+
+export interface MeetingPrepData {
+  event: Event;
+  match_analysis: string | null;
+  skill_gap_report: string | null;
+  company_brief: string | null;
+  culture_analysis: string | null;
+  interview_prep_guide: string | null;
+  star_responses: string | null;
+  recruiter_screen_guide: string | null;
+  story_cheatsheet: string | null;
+  relevant_stories: StoryBankStory[];
+  shift_gears_briefing: string | null;
+  prep_completeness: number;
+  missing_sections: string[];
+}
+
 // AI Safety Testing types
 export interface SafetyTestResult {
   id: string;

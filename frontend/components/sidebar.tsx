@@ -14,6 +14,7 @@ import {
   FileText,
   FileStack,
   Bot,
+  CalendarClock,
   BookOpen,
   UserCircle,
   MessageSquareCode,
@@ -61,6 +62,12 @@ const mainNavItems: NavItem[] = [
     href: "/agents",
     icon: Bot,
     permission: { resource: "agents", action: "view" },
+  },
+  {
+    label: "Command Center",
+    href: "/command-center",
+    icon: CalendarClock,
+    permission: { resource: "events", action: "view" },
   },
   {
     label: "Story Bank",
