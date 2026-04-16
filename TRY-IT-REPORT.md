@@ -1,6 +1,6 @@
 # CareerLens -- Try-It Report
-> Tested: 2026-03-20
-> Status: All Passing (40/40)
+> Tested: 2026-04-15
+> Status: All Passing (28/28 e2e tests)
 
 ## Summary
 
@@ -9,63 +9,78 @@ Your app was tested automatically. Here's what happened:
 | What Was Tested | Result |
 |----------------|--------|
 | App starts up | PASS |
-| Login works | PASS (all 4 roles) |
-| All pages load | 10 of 10 passing |
+| Login works (Admin + User) | PASS |
+| All pages load | 17 of 17 pages passing |
 | Permissions work correctly | PASS |
 | API is responding | PASS |
-| Logout works | PASS (all 4 roles) |
+| New Task API (CRUD) | PASS |
+| New Quick Capture API | PASS |
 
 ## Login Testing
 
 Each type of user was tested:
 
-| User Type | Login | Dashboard | Pages Tested | Result |
+| User Type | Login | Home Page | Pages Tested | Result |
 |-----------|-------|-----------|-------------|--------|
-| Super Admin | PASS | PASS | 10 of 10 | PASS |
-| Admin | PASS | PASS | 10 of 10 | PASS |
-| Pro User | PASS | PASS | 6 of 6 | PASS |
-| User | PASS | PASS | 6 of 6 | PASS |
+| Admin User (Super Admin) | PASS | PASS | 9 of 9 | PASS |
+| Regular User | PASS | PASS | 8 of 8 | PASS |
 
 ## Pages Tested
 
-| Page | Super Admin | Admin | Pro User | User | Notes |
-|------|-------------|-------|----------|------|-------|
-| Dashboard | PASS | PASS | PASS | PASS | |
-| Profile | PASS | PASS | PASS | PASS | |
-| Jobs | PASS | PASS | PASS | PASS | |
-| Applications | PASS | PASS | PASS | PASS | |
-| Agents | PASS | PASS | PASS | PASS | |
-| Settings | PASS | PASS | PASS | PASS | |
-| Admin Users | PASS | PASS | N/A | N/A | Admin only |
-| Admin Roles | PASS | PASS | N/A | N/A | Admin only |
-| Admin Prompts | PASS | PASS | N/A | N/A | Admin only |
-| Admin Settings | PASS | PASS | N/A | N/A | Admin only (NEW in v0.12.0) |
+| Page | Admin | User | Notes |
+|------|-------|------|-------|
+| Command Center (home) | PASS | PASS | New home page with Quick Capture + Task Inbox |
+| Dashboard | PASS | PASS | Stats overview (still accessible via /dashboard) |
+| My Profile | PASS | PASS | |
+| Job Listings | PASS | PASS | |
+| Resumes | PASS | PASS | |
+| Application Studio | PASS | PASS | |
+| Story Bank | PASS | PASS | |
+| Analytics | PASS | PASS | |
+| AI Instructions | PASS | N/A | Admin only |
 
-## New in This Release (v0.12.0)
+## New in This Release (v0.24.0 -- JARVIS Phase 1)
 
-- **Admin Settings page** (`/admin/settings`) -- all 23 .env variables configurable via UI
-- 7 setting groups: Database (1), Authentication (3), Security (2), URLs (2), AI Provider (9), RAG/Embeddings (6), Mock Services (1)
-- Sensitive values masked with eye-toggle reveal
-- "Restart required" badges on settings that need a server restart
-- Bulk save per group
-- Full audit log with old/new value diffs
-- RBAC: `app_settings.view` and `app_settings.edit` permissions
+### Command Center is now the home page
+- Login redirects to `/command-center` instead of `/dashboard`
+- Sidebar shows Command Center at the top
+- Dashboard still accessible at `/dashboard` for stats
+
+### Quick Capture
+- Drop a note in natural language -- JARVIS extracts tasks, events, and action items
+- "Capture & Process" button uses AI to classify and extract
+- "Parse as Event" button for quick event creation (legacy flow)
+- Unprocessed captures queue with amber highlight and Process button
+
+### Task System
+- Task Inbox with priority icons (urgent=red, important=orange, normal=blue, low=gray)
+- Relative due dates (overdue, due today, due tomorrow, due in Xd)
+- Due reasons displayed alongside dates
+- Checkbox completion and dismiss (X) button
+- Manual task creation via "+ Task" button
+- 12 new API endpoints for tasks and quick captures
 
 ## Screenshots
 
 Screenshots saved in `.try-it/screenshots/`:
-- `mock-admin_dashboard.png` -- Super Admin dashboard
-- `mock-admin_admin_settings.png` -- Admin Settings page (NEW)
-- `mock-manager_admin_settings.png` -- Admin Settings as Admin role
-- Plus screenshots for all pages per role
+
+**Admin:**
+- `admin_command-center.png` -- New Command Center home page (empty state)
+- `admin_command-center_with_tasks.png` -- Command Center with populated tasks + unprocessed capture
+- `admin_dashboard.png` -- Dashboard stats overview
+- `admin_profile.png`, `admin_jobs.png`, `admin_resumes.png`, `admin_agents.png`
+- `admin_stories.png`, `admin_analytics.png`, `admin_admin-prompts.png`
+
+**Regular User:**
+- `user_command-center.png` -- Command Center (user view, no admin links)
+- `user_dashboard.png`, `user_profile.png`, `user_jobs.png`, `user_resumes.png`
+- `user_agents.png`, `user_stories.png`, `user_analytics.png`
 
 ## How to Access Your App
 
 - **Open your browser to:** http://localhost:3300
-- **To log in as Super Admin:** Click "Sign In", pick "Admin User" (admin@career-lens.local)
-- **To log in as Admin:** Click "Sign In", pick "Manager User" (manager@career-lens.local)
-- **To log in as Pro User:** Click "Sign In", pick "Pro User" (pro@career-lens.local)
-- **To log in as User:** Click "Sign In", pick "Regular User" (user@career-lens.local)
+- **To log in as Super Admin:** Click "Sign In with SSO", pick "Admin User" (admin@career-lens.local)
+- **To log in as Regular User:** Click "Sign In with SSO", pick "Regular User" (user@career-lens.local)
 
 ## Services Running
 
@@ -77,10 +92,16 @@ Screenshots saved in `.try-it/screenshots/`:
 | Mock OIDC | http://localhost:10190 | Healthy |
 | Mock Olivia | http://localhost:10191 | Healthy |
 
-## Issues Found
-None -- all tests passing.
+## Issues Found & Fixed During Testing
+
+1. **OIDC callback redirect** -- Backend was still redirecting to `/dashboard` after login. Fixed in `backend/app/routers/auth.py` to redirect to `/command-center`.
+2. **Dashboard e2e tests** -- Needed explicit `/dashboard` navigation since home is now Command Center. Added Command Center-specific e2e tests.
+
+**No remaining issues.**
 
 ## What to Do Next
 - Explore your app in the browser (see instructions above)
+- Try the Quick Capture: type a note and click "Capture & Process" to see JARVIS extract tasks
+- Try creating manual tasks with the "+ Task" button
 - If something doesn't look right, tell me and I'll fix it
 - To make changes, type **/resume-it**

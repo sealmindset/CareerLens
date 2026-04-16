@@ -126,9 +126,9 @@ async def callback(
     }
     token = jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
-    # Set httpOnly cookie and redirect to dashboard
+    # Set httpOnly cookie and redirect to command center
     response = RedirectResponse(
-        url=f"{settings.FRONTEND_URL}/dashboard", status_code=302
+        url=f"{settings.FRONTEND_URL}/command-center", status_code=302
     )
     response.set_cookie(
         key="token",
