@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application import Application
 from app.models.event import Event
-from app.models.job import JobListing
+from app.models.job import JobListing, JobRequirement
 from app.models.workspace import AgentWorkspace, WorkspaceArtifact
 from app.services.note_parser import parse_note
 from app.services.notification_service import create_notification
@@ -87,6 +87,8 @@ async def create_from_note(
             title=role_title,
             company=company,
             location=parsed.get("location"),
+            description=parsed.get("description"),
+            salary_range=parsed.get("salary_range"),
             job_type=parsed.get("job_type"),
             source=source if source in (
                 "linkedin", "indeed", "glassdoor", "company_site",
@@ -98,6 +100,21 @@ async def create_from_note(
         db.add(job)
         await db.flush()
         await db.refresh(job)
+
+        # Create JobRequirement rows if full JD was parsed
+        requirements_list = parsed.get("requirements") or []
+        for req in requirements_list:
+            if isinstance(req, dict) and req.get("text"):
+                req_type = req.get("type", "required")
+                if req_type not in ("required", "preferred", "nice_to_have"):
+                    req_type = "required"
+                db.add(JobRequirement(
+                    job_listing_id=job.id,
+                    requirement_text=req["text"],
+                    requirement_type=req_type,
+                ))
+        if requirements_list:
+            await db.flush()
 
     # 3. Find or create Application
     app_result = await db.execute(
@@ -164,17 +181,28 @@ async def create_from_note(
     await db.refresh(event, ["application"])
 
     # 9. Create notification
+    req_count = len(parsed.get("requirements") or [])
+    is_full_jd = parsed.get("input_mode") == "full_jd"
+    if is_full_jd and req_count:
+        notify_msg = (
+            f"JARVIS created a job listing with {req_count} requirements, "
+            f"application, and event for {role_title} at {company}."
+        )
+    else:
+        notify_msg = (
+            f"JARVIS created an event from your note: {event_type.replace('_', ' ').title()} "
+            f"for {role_title} at {company}."
+        )
+    if scheduled_at:
+        notify_msg += f" Scheduled: {scheduled_at.strftime('%b %d, %Y %I:%M %p')}"
+
     await create_notification(
         db,
         title=f"Event created: {role_title} at {company}",
         notification_type="STATUS_CHANGE",
         recipient_type="INTERNAL",
         recipient_id=user_id,
-        message=(
-            f"JARVIS created an event from your note: {event_type.replace('_', ' ').title()} "
-            f"for {role_title} at {company}."
-            + (f" Scheduled: {scheduled_at.strftime('%b %d, %Y %I:%M %p')}" if scheduled_at else "")
-        ),
+        message=notify_msg,
         related_entity_type="event",
         related_entity_id=event.id,
         sent_by="JARVIS",

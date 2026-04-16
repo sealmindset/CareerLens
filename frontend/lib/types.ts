@@ -623,6 +623,7 @@ export interface Event {
 }
 
 export interface NoteParseResult {
+  input_mode: string | null;
   contact_name: string | null;
   contact_email: string | null;
   role_title: string | null;
@@ -636,8 +637,19 @@ export interface NoteParseResult {
   duration_estimate: string | null;
   contract_details: string | null;
   source: string | null;
+  salary_range: string | null;
   additional_notes: string | null;
+  description: string | null;
+  requirements: Array<{ text: string; type: string }> | null;
   confidence: Record<string, number>;
+}
+
+export interface EnrichedRequirement {
+  text: string;
+  type: string;
+  outlier: boolean;
+  matched_in: string | null;
+  story_id: string | null;
 }
 
 export interface MeetingPrepData {

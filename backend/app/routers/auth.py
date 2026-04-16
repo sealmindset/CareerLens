@@ -121,7 +121,7 @@ async def callback(
         "role_id": str(user.role_id),
         "role_name": role.name,
         "permissions": permissions,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=8),
+        "exp": datetime.now(timezone.utc) + timedelta(days=365),
         "iat": datetime.now(timezone.utc),
     }
     token = jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")

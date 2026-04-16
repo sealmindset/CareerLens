@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
+  BookPlus,
   CalendarClock,
+  Check,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -26,7 +29,7 @@ import {
 import { apiGet, apiPost, apiDelete } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { TaskList } from "@/components/task-list";
-import type { Event, NoteParseResult, Task, QuickCapture, QuickCaptureProcessResult } from "@/lib/types";
+import type { Event, EnrichedRequirement, NoteParseResult, Task, QuickCapture, QuickCaptureProcessResult } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -119,6 +122,15 @@ export default function CommandCenterPage() {
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
   const [creating, setCreating] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+
+  // Outlier detection
+  const [outlierResults, setOutlierResults] = useState<EnrichedRequirement[] | null>(null);
+  const [checkingOutliers, setCheckingOutliers] = useState(false);
+  const [confirmingIdx, setConfirmingIdx] = useState<number | null>(null);
+  const [outlierDesc, setOutlierDesc] = useState("");
+  const [outlierCompany, setOutlierCompany] = useState("");
+  const [outlierRepo, setOutlierRepo] = useState("");
+  const [savingOutlier, setSavingOutlier] = useState(false);
 
   // Manual event create
   const [showManual, setShowManual] = useState(false);
@@ -238,10 +250,55 @@ export default function CommandCenterPage() {
         raw_note: captureText,
       });
       setParseResult(result);
+
+      // Auto-trigger outlier check for full JD parses with requirements
+      if (result.requirements && result.requirements.length > 0) {
+        setCheckingOutliers(true);
+        try {
+          const outlierResp = await apiPost<{ requirements: EnrichedRequirement[] }>(
+            "/events/check-outliers",
+            { requirements: result.requirements }
+          );
+          setOutlierResults(outlierResp.requirements);
+        } catch {
+          // Non-blocking -- outlier check is optional
+        } finally {
+          setCheckingOutliers(false);
+        }
+      }
     } catch {
       // ignore
     } finally {
       setCapturing(false);
+    }
+  };
+
+  // Confirm outlier experience
+  const handleConfirmOutlier = async (idx: number, req: EnrichedRequirement) => {
+    if (!outlierDesc.trim()) return;
+    setSavingOutlier(true);
+    try {
+      const skillName = req.text.length > 60 ? req.text.slice(0, 60) + "..." : req.text;
+      await apiPost("/events/confirm-outlier", {
+        requirement_text: req.text,
+        skill_name: skillName,
+        description: outlierDesc,
+        company: outlierCompany || null,
+        repo_url: outlierRepo || null,
+      });
+      if (outlierResults) {
+        const updated = [...outlierResults];
+        updated[idx] = { ...updated[idx], outlier: false, matched_in: "story_bank" };
+        setOutlierResults(updated);
+      }
+      setConfirmingIdx(null);
+      setOutlierDesc("");
+      setOutlierCompany("");
+      setOutlierRepo("");
+    } catch {
+      // ignore
+    } finally {
+      setSavingOutlier(false);
     }
   };
 
@@ -357,6 +414,7 @@ export default function CommandCenterPage() {
     { key: "platform", label: "Platform" },
     { key: "location", label: "Location" },
     { key: "job_type", label: "Job Type" },
+    { key: "salary_range", label: "Salary Range" },
     { key: "source", label: "Source" },
     { key: "contract_details", label: "Contract Details" },
     { key: "additional_notes", label: "Notes" },
@@ -421,8 +479,8 @@ export default function CommandCenterPage() {
           <textarea
             value={captureText}
             onChange={(e) => setCaptureText(e.target.value)}
-            placeholder='e.g. "Need to follow up with Dylan at Wealth Enhancement by Friday. Also prep for the technical interview next Tuesday at 1pm CST on Teams."'
-            rows={3}
+            placeholder='Paste a recruiter message, a full JD, or a quick note like "Need to follow up with Dylan at Wealth Enhancement by Friday. Also prep for the technical interview next Tuesday at 1pm CST on Teams."'
+            rows={4}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -550,6 +608,151 @@ export default function CommandCenterPage() {
                   Confirm & Create Event
                 </button>
               </div>
+
+              {/* Full JD: Description */}
+              {parseResult.description && (
+                <div className="mt-4">
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-1">
+                    Job Description
+                    <span className="ml-1.5 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                      Full JD
+                    </span>
+                  </h4>
+                  <textarea
+                    value={overrides.description ?? parseResult.description}
+                    onChange={(e) => setFieldOverride("description", e.target.value)}
+                    rows={6}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  />
+                </div>
+              )}
+
+              {/* Full JD: Requirements with Outlier Detection */}
+              {parseResult.requirements && parseResult.requirements.length > 0 && (
+                <div className="mt-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h4 className="text-xs font-semibold text-muted-foreground">
+                      Requirements ({parseResult.requirements.length})
+                    </h4>
+                    {checkingOutliers && (
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Checking your profile...
+                      </span>
+                    )}
+                    {outlierResults && !checkingOutliers && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {outlierResults.filter((r) => r.outlier).length} not found in profile
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                    {(outlierResults || parseResult.requirements).map((req, idx) => {
+                      const enriched = outlierResults ? outlierResults[idx] : null;
+                      const isOutlier = enriched?.outlier ?? false;
+                      const matchedIn = enriched?.matched_in;
+                      return (
+                        <div key={idx}>
+                          <div className="flex items-start gap-2 text-sm">
+                            {enriched && !isOutlier && (
+                              <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+                            )}
+                            {enriched && isOutlier && (
+                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
+                            )}
+                            {!enriched && (
+                              <span className="mt-0.5 h-4 w-4 shrink-0" />
+                            )}
+                            <span
+                              className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                req.type === "required"
+                                  ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                  : req.type === "preferred"
+                                    ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                    : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                              }`}
+                            >
+                              {req.type === "nice_to_have" ? "Bonus" : req.type === "preferred" ? "Pref" : "Req"}
+                            </span>
+                            <span className="flex-1 text-foreground">{req.text}</span>
+                            {enriched && !isOutlier && matchedIn && (
+                              <span className="shrink-0 text-[10px] text-green-600">
+                                {matchedIn === "story_bank" ? "Story Bank" : "Profile"}
+                              </span>
+                            )}
+                            {enriched && isOutlier && confirmingIdx !== idx && (
+                              <button
+                                onClick={() => {
+                                  setConfirmingIdx(idx);
+                                  setOutlierDesc("");
+                                  setOutlierCompany("");
+                                  setOutlierRepo("");
+                                }}
+                                className="shrink-0 inline-flex items-center gap-1 rounded-md border border-orange-300 px-2 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                              >
+                                <BookPlus className="h-3 w-3" />
+                                I have this
+                              </button>
+                            )}
+                          </div>
+                          {confirmingIdx === idx && enriched && isOutlier && (
+                            <div className="ml-6 mt-2 rounded-lg border border-orange-200 bg-orange-50/50 p-3 dark:border-orange-800 dark:bg-orange-950/20">
+                              <p className="text-xs font-medium text-foreground mb-2">
+                                Describe your experience:
+                              </p>
+                              <textarea
+                                value={outlierDesc}
+                                onChange={(e) => setOutlierDesc(e.target.value)}
+                                placeholder="e.g., I operationalized Snyk at Sleep Number — set it up, managed onboarding, built snyk-ez for automated repo management..."
+                                rows={3}
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                              />
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] font-medium text-muted-foreground">Company (optional)</label>
+                                  <input
+                                    type="text"
+                                    value={outlierCompany}
+                                    onChange={(e) => setOutlierCompany(e.target.value)}
+                                    placeholder="e.g., Sleep Number"
+                                    className="mt-0.5 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-medium text-muted-foreground">Repo / Portfolio URL (optional)</label>
+                                  <input
+                                    type="text"
+                                    value={outlierRepo}
+                                    onChange={(e) => setOutlierRepo(e.target.value)}
+                                    placeholder="e.g., https://github.com/..."
+                                    className="mt-0.5 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+                                  />
+                                </div>
+                              </div>
+                              <div className="mt-2 flex items-center gap-2">
+                                <button
+                                  onClick={() => handleConfirmOutlier(idx, enriched)}
+                                  disabled={savingOutlier || !outlierDesc.trim()}
+                                  className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                                >
+                                  {savingOutlier ? <Loader2 className="h-3 w-3 animate-spin" /> : <BookPlus className="h-3 w-3" />}
+                                  Save to Story Bank
+                                </button>
+                                <button
+                                  onClick={() => setConfirmingIdx(null)}
+                                  className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+                                >
+                                  Skip
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

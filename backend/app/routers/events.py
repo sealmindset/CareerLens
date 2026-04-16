@@ -22,9 +22,14 @@ from app.schemas.event import (
     NoteCreateRequest,
     NoteParseRequest,
     NoteParseResult,
+    OutlierCheckRequest,
+    OutlierCheckResponse,
+    OutlierConfirmRequest,
+    OutlierConfirmResponse,
 )
 from app.services.command_center import aggregate_prep, create_from_note
 from app.services.note_parser import parse_note
+from app.services.outlier_detector import detect_outliers
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +229,125 @@ async def create_from_note_endpoint(
     user_id = await _get_user_id(db, current_user)
     event = await create_from_note(db, user_id, data.raw_note, data.overrides)
     return _enrich_event(event)
+
+
+# ---- Outlier Detection endpoints ---------------------------------------------
+
+@router.post("/check-outliers", response_model=OutlierCheckResponse)
+async def check_outliers_endpoint(
+    data: OutlierCheckRequest,
+    current_user: UserInfo = Depends(require_permission("events", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Compare parsed requirements against user's profile and Story Bank."""
+    user_id = await _get_user_id(db, current_user)
+    enriched = await detect_outliers(db, user_id, data.requirements)
+    return OutlierCheckResponse(requirements=enriched)
+
+
+@router.post("/confirm-outlier", response_model=OutlierConfirmResponse)
+async def confirm_outlier_endpoint(
+    data: OutlierConfirmRequest,
+    current_user: UserInfo = Depends(require_permission("events", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Confirm experience with an outlier skill, create Story Bank entry."""
+    from app.ai.prompt_loader import get_prompt, get_prompt_config
+    from app.ai.provider import get_ai_provider, get_model_for_tier
+    from app.models.story_bank import StoryBankStory
+
+    user_id = await _get_user_id(db, current_user)
+
+    # Use AI to structure the user's description into story format
+    fallback_prompt = (
+        "You structure a user's description of their experience with a specific skill "
+        "into a Story Bank entry. Return JSON with: problem, solved, deployed, takeaway, "
+        "hook_line, trigger_keywords (array of strings)."
+    )
+    system_prompt = await get_prompt(db, "jarvis-outlier-structurer", fallback_prompt)
+    temperature, max_tokens, model_tier = await get_prompt_config(
+        db, "jarvis-outlier-structurer"
+    )
+
+    user_prompt = (
+        f"Skill: {data.skill_name}\n"
+        f"Description: {data.description}\n"
+    )
+    if data.company:
+        user_prompt += f"Company: {data.company}\n"
+    if data.repo_url:
+        user_prompt += f"Repository: {data.repo_url}\n"
+
+    user_prompt += (
+        "\nStructure this into a Story Bank entry. Return JSON only with keys: "
+        "problem, solved, deployed, takeaway, hook_line, trigger_keywords"
+    )
+
+    # Defaults in case AI fails
+    structured = {
+        "problem": data.description,
+        "solved": data.description,
+        "deployed": data.description,
+        "takeaway": f"Deep hands-on experience with {data.skill_name}",
+        "hook_line": f"Implemented and operationalized {data.skill_name}"
+        + (f" at {data.company}" if data.company else ""),
+        "trigger_keywords": [data.skill_name.lower()],
+    }
+
+    try:
+        ai = get_ai_provider()
+        model = get_model_for_tier(model_tier)
+        raw = await ai.complete(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        parsed = json.loads(cleaned)
+        # Merge AI results with defaults
+        for key in structured:
+            if parsed.get(key):
+                structured[key] = parsed[key]
+    except Exception as exc:
+        logger.warning("AI story structuring failed (%s), using defaults", exc)
+
+    # Ensure trigger_keywords includes the skill name
+    keywords = structured.get("trigger_keywords", [])
+    if isinstance(keywords, list):
+        if data.skill_name.lower() not in [k.lower() for k in keywords]:
+            keywords.append(data.skill_name.lower())
+    else:
+        keywords = [data.skill_name.lower()]
+
+    # Create Story Bank entry
+    story = StoryBankStory(
+        user_id=user_id,
+        story_title=f"{data.skill_name} Experience"
+        + (f" at {data.company}" if data.company else ""),
+        source_bullet=data.description
+        + (f"\nRepo: {data.repo_url}" if data.repo_url else ""),
+        source_company=data.company,
+        problem=structured["problem"],
+        solved=structured["solved"],
+        deployed=structured["deployed"],
+        takeaway=structured.get("takeaway"),
+        hook_line=structured.get("hook_line"),
+        trigger_keywords=keywords,
+        status="active",
+    )
+    db.add(story)
+    await db.flush()
+    await db.refresh(story)
+    await db.commit()
+
+    return OutlierConfirmResponse(
+        story_id=story.id,
+        story_title=story.story_title,
+    )
 
 
 # ---- Meeting Prep endpoints ------------------------------------------------

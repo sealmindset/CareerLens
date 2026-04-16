@@ -72,6 +72,7 @@ class NoteParseRequest(BaseModel):
 
 
 class NoteParseResult(BaseModel):
+    input_mode: str | None = None  # "quick_note" or "full_jd"
     contact_name: str | None = None
     contact_email: str | None = None
     role_title: str | None = None
@@ -85,13 +86,47 @@ class NoteParseResult(BaseModel):
     duration_estimate: str | None = None
     contract_details: str | None = None
     source: str | None = None
+    salary_range: str | None = None
     additional_notes: str | None = None
+    # Full JD mode fields
+    description: str | None = None
+    requirements: list[dict] | None = None  # [{"text": "...", "type": "required|preferred|nice_to_have"}]
     confidence: dict[str, float] = {}
 
 
 class NoteCreateRequest(BaseModel):
     raw_note: str
     overrides: dict | None = None
+
+
+class EnrichedRequirement(BaseModel):
+    text: str
+    type: str = "required"
+    outlier: bool = True
+    matched_in: str | None = None  # "profile" | "story_bank" | None
+    story_id: str | None = None
+
+
+class OutlierCheckRequest(BaseModel):
+    requirements: list[dict]
+
+
+class OutlierCheckResponse(BaseModel):
+    requirements: list[EnrichedRequirement] = []
+
+
+class OutlierConfirmRequest(BaseModel):
+    requirement_text: str
+    skill_name: str
+    description: str
+    company: str | None = None
+    repo_url: str | None = None
+
+
+class OutlierConfirmResponse(BaseModel):
+    story_id: uuid.UUID
+    story_title: str
+    message: str = "Experience saved to Story Bank"
 
 
 class MeetingPrepResponse(BaseModel):
