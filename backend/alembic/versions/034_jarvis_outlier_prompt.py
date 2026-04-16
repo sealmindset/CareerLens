@@ -1,7 +1,7 @@
 """Seed JARVIS outlier-structurer managed prompt.
 
-Revision ID: 033
-Revises: 032
+Revision ID: 034
+Revises: 033
 """
 
 import uuid
@@ -9,8 +9,8 @@ import uuid
 import sqlalchemy as sa
 from alembic import op
 
-revision = "033"
-down_revision = "032"
+revision = "034"
+down_revision = "033"
 branch_labels = None
 depends_on = None
 
