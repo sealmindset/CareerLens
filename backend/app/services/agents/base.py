@@ -16,6 +16,7 @@ from app.ai.validate import validate_agent_output
 from app.models.application import Application
 from app.models.job import JobListing
 from app.models.profile import Profile
+from app.models.story_bank import StoryBankStory
 from app.models.workspace import WorkspaceArtifact
 from app.services.rag_service import format_rag_context, retrieve_relevant_chunks
 from app.services.workspace_service import build_workspace_context, get_artifacts, save_artifact
@@ -185,6 +186,74 @@ def format_job_context(job: JobListing) -> str:
     return "\n".join(parts)
 
 
+async def format_story_bank_context(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    job: JobListing,
+) -> str:
+    """Load Story Bank stories and format as context for agents.
+
+    Uses trigger_keywords to match stories against job requirements and
+    description, so agents see verified experience the user has confirmed.
+    """
+    result = await db.execute(
+        select(StoryBankStory).where(
+            StoryBankStory.user_id == user_id,
+            StoryBankStory.status == "active",
+        )
+    )
+    stories = list(result.scalars().all())
+    if not stories:
+        return ""
+
+    # Build search text from job requirements + description for matching
+    job_text_lower = (job.description or "").lower()
+    if job.requirements:
+        for req in job.requirements:
+            job_text_lower += " " + req.requirement_text.lower()
+
+    # Match stories by trigger_keywords against job text
+    matched: list[StoryBankStory] = []
+    unmatched: list[StoryBankStory] = []
+    for story in stories:
+        keywords = story.trigger_keywords or []
+        if any(kw.lower() in job_text_lower for kw in keywords):
+            matched.append(story)
+        else:
+            unmatched.append(story)
+
+    # Include matched stories first, then up to 3 unmatched for breadth
+    display = matched + unmatched[:3]
+    if not display:
+        return ""
+
+    parts = [
+        "## Story Bank (Verified Experience)\n",
+        "The candidate has confirmed the following experiences. These are VERIFIED "
+        "facts -- treat them as real skills and experience when analyzing gaps.\n",
+    ]
+
+    for story in display:
+        is_match = story in matched
+        label = f"**{story.story_title}**"
+        if story.source_company:
+            label += f" ({story.source_company})"
+        if is_match:
+            label += " [MATCHES JD]"
+        parts.append(label)
+        if story.hook_line:
+            parts.append(f"  {story.hook_line}")
+        if story.problem:
+            parts.append(f"  Problem: {story.problem[:150]}")
+        if story.deployed:
+            parts.append(f"  Result: {story.deployed[:150]}")
+        if story.trigger_keywords:
+            parts.append(f"  Keywords: {', '.join(story.trigger_keywords[:10])}")
+        parts.append("")
+
+    return "\n".join(parts)
+
+
 async def call_agent_ai(
     db: AsyncSession,
     agent_name: str,
@@ -216,6 +285,13 @@ async def call_agent_ai(
 
     # Add job context
     parts.append(format_job_context(context.job))
+
+    # Add Story Bank context (verified experience matched to this job)
+    story_ctx = await format_story_bank_context(
+        context.db, context.user_id, context.job
+    )
+    if story_ctx:
+        parts.append(story_ctx)
 
     # Add workspace context from other agents
     workspace_ctx = build_workspace_context(context.workspace_artifacts)
