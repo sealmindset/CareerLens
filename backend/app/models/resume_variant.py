@@ -79,6 +79,27 @@ class ResumeVariantVersion(Base):
         nullable=False,
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    agent_track: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_variant_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("resume_variant_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    source_workspace_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspace_artifacts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("job_listings.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    authored_by_conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_conversations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     headline: Mapped[str | None] = mapped_column(String(500), nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_resume_text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -97,6 +118,6 @@ class ResumeVariantVersion(Base):
 
     __table_args__ = (
         sa.UniqueConstraint(
-            "variant_id", "version_number", name="uq_variant_version"
+            "variant_id", "agent_track", "version_number", name="uq_variant_track_version"
         ),
     )

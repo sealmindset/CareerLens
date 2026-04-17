@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import auth, permissions, roles, users, prompts
 from app.routers import profile, jobs, applications, agents, dashboard
-from app.routers import resume_variants, story_bank, notifications, events
+from app.routers import resume_variants, story_bank, notifications, events, resume_chat
 from app.routers import analytics, security_scan, ai_safety
 from app.routers import tasks, quick_captures
 from app.routers import settings as settings_router
@@ -102,6 +102,7 @@ app.include_router(applications.router)
 app.include_router(agents.router)
 app.include_router(dashboard.router)
 app.include_router(resume_variants.router)
+app.include_router(resume_chat.router)
 app.include_router(story_bank.router)
 app.include_router(notifications.router)
 app.include_router(events.router)

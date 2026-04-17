@@ -776,3 +776,57 @@ export interface ChatbotSubmitResult {
   error: string | null;
   completed: boolean;
 }
+
+// ─── Resume Chat (coach model) ─────────────────────────────────────────────
+
+export type ResumeChatAgent = "tailor" | "achievement_amplifier";
+
+export interface ResumeChatMessage {
+  id: string;
+  role: "system" | "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
+export interface ResumeChatPendingProposal {
+  text: string;
+  proposed_at: string;
+}
+
+export interface ResumeChatState {
+  id: string;
+  agent_name: ResumeChatAgent;
+  workspace_id: string;
+  job_id: string | null;
+  draft_resume_text: string;
+  loaded_artifact_id: string | null;
+  loaded_artifact_version: number | null;
+  loaded_artifact_title: string | null;
+  pending_proposal: ResumeChatPendingProposal | null;
+  messages: ResumeChatMessage[];
+}
+
+export interface ResumeChatSendResponse {
+  user_message: ResumeChatMessage;
+  assistant_message: ResumeChatMessage;
+  draft_resume_text: string;
+  pending_proposal: ResumeChatPendingProposal | null;
+}
+
+export interface ResumeChatApplyResponse {
+  assistant_message: ResumeChatMessage;
+  draft_resume_text: string;
+}
+
+export interface ResumeChatPublishResponse {
+  artifact_id: string;
+  workspace_id: string;
+  artifact_type: string;
+  agent_name: ResumeChatAgent;
+  title: string;
+  version: number;
+}
+
+export interface ResumeChatLatestExistsResponse {
+  exists: boolean;
+}

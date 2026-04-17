@@ -1152,6 +1152,7 @@ export default function ResumesPage() {
           </div>
         </Modal>
       )}
+
     </div>
   );
 }

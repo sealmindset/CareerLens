@@ -3,19 +3,21 @@ from datetime import datetime
 
 import sqlalchemy as sa
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
 agent_name_enum = sa.Enum(
     "scout", "tailor", "coach", "strategist", "brand_advisor", "coordinator",
+    "achievement_amplifier",
     name="agent_name",
     create_type=True,
 )
 
 context_type_enum = sa.Enum(
-    "job_analysis", "resume_tailoring", "gap_interview", "brand_research", "form_filling", "general",
+    "job_analysis", "resume_tailoring", "gap_interview", "brand_research",
+    "form_filling", "general", "resume_amplification",
     name="context_type",
     create_type=True,
 )
@@ -50,6 +52,32 @@ class AgentConversation(Base):
     status: Mapped[str] = mapped_column(
         conversation_status_enum, nullable=False, default="active"
     )
+    starting_variant_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("resume_variant_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    starting_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspace_artifacts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("job_listings.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    target_variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("resume_variants.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_workspaces.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    draft_resume: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -63,7 +91,11 @@ class AgentConversation(Base):
     # Relationships
     user = relationship("User", backref="agent_conversations", lazy="selectin")
     messages = relationship(
-        "AgentMessage", back_populates="conversation", cascade="all, delete-orphan", lazy="selectin"
+        "AgentMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="AgentMessage.created_at",
     )
 
 

@@ -6,6 +6,8 @@ import { apiGet, apiPost, apiPut, apiDownload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatRelative } from "@/lib/utils";
 import { MarkdownContent } from "@/components/markdown-content";
+import { ResumeChatDrawer } from "@/components/resume-chat-drawer";
+import type { ResumeChatAgent } from "@/lib/types";
 import type {
   AgentConversation,
   AgentMessage,
@@ -258,6 +260,10 @@ export default function AgentsPage() {
   const [downloading, setDownloading] = useState<string | null>(null);
   const artifactViewerRef = useRef<HTMLDivElement>(null);
 
+  // Resume coach chat drawer (per-agent, per-workspace)
+  const [resumeChatAgent, setResumeChatAgent] = useState<ResumeChatAgent | null>(null);
+  const [resumeChatToast, setResumeChatToast] = useState<string | null>(null);
+
   // Interview Verdict state
   const [verdictRunning, setVerdictRunning] = useState(false);
   const [verdictExpanded, setVerdictExpanded] = useState<Set<string>>(new Set());
@@ -483,6 +489,12 @@ export default function AgentsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoLoadJobId, jobListings, workspace]);
 
+  useEffect(() => {
+    if (!resumeChatToast) return;
+    const t = setTimeout(() => setResumeChatToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [resumeChatToast]);
+
   // --- Chat functions ---
 
   const fetchConversations = useCallback(async (agentName: string) => {
@@ -566,6 +578,37 @@ export default function AgentsPage() {
 
   const chatWithAgent = async (agent: AgentDef) => {
     if (!selectedAppId) return;
+    // Tailor / Achievement Amplifier open the resume coach drawer instead of
+    // a generic agent chat. Drawer only opens if the agent has produced a
+    // resume artifact already; otherwise toast the user to run it first.
+    if (agent.key === "tailor" || agent.key === "achievement_amplifier") {
+      if (!workspace) {
+        setResumeChatToast(
+          "Open a job workspace first, then click Chat again.",
+        );
+        return;
+      }
+      try {
+        const resp = await apiPost<{ exists: boolean }>(
+          "/resume-chat/latest-exists",
+          { agent_name: agent.key, workspace_id: workspace.id },
+        );
+        console.log("[resume-chat] preflight", agent.key, "→", resp);
+        if (!resp.exists) {
+          setResumeChatToast(
+            `Run ${agent.name} first — there's no ${agent.key === "tailor" ? "tailored" : "amplified"} resume in this workspace yet.`,
+          );
+          return;
+        }
+        setResumeChatAgent(agent.key as ResumeChatAgent);
+      } catch (err) {
+        console.error("[resume-chat] preflight failed", err);
+        setResumeChatToast(
+          "Couldn't open the resume coach. Try again in a moment.",
+        );
+      }
+      return;
+    }
     try {
       const convo = await apiPost<AgentConversation>(
         `/agents/${agent.key}/conversations`,
@@ -871,8 +914,55 @@ export default function AgentsPage() {
 
   // ─── Workspace view (main landing) ─────────────────────────────────
 
+  const resumeChatOverlays = (
+    <>
+      {resumeChatAgent && workspace && (
+        <ResumeChatDrawer
+          open={true}
+          onClose={() => setResumeChatAgent(null)}
+          agent={resumeChatAgent}
+          workspaceId={workspace.id}
+          onPublished={() => {
+            if (selectedJob) loadWorkspace(selectedJob);
+          }}
+        />
+      )}
+      {resumeChatToast && (
+        <div
+          className="fixed left-1/2 top-6 z-[100] w-[min(92vw,28rem)] -translate-x-1/2 rounded-lg border-2 px-5 py-4 text-sm shadow-2xl"
+          style={{
+            backgroundColor: "rgb(254,243,199)",
+            borderColor: "rgb(217,119,6)",
+            color: "rgb(120,53,15)",
+          }}
+          role="status"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle
+              className="mt-0.5 h-5 w-5 shrink-0"
+              style={{ color: "rgb(217,119,6)" }}
+            />
+            <div className="flex-1">
+              <p className="font-semibold leading-snug">Heads up</p>
+              <p className="mt-0.5 leading-snug">{resumeChatToast}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setResumeChatToast(null)}
+              className="shrink-0 rounded-md px-1 py-0.5 text-xs hover:bg-amber-200"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   if (viewMode === "workspace") {
     return (
+      <>
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -1314,7 +1404,12 @@ export default function AgentsPage() {
                           disabled={pipelineRunning}
                           className="inline-flex items-center justify-center rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 hover:bg-accent"
                           style={{ borderColor: "var(--border)" }}
-                          title={`Chat with ${agent.name} about this application`}
+                          title={
+                            agent.key === "tailor" ||
+                            agent.key === "achievement_amplifier"
+                              ? `Review and revise the latest ${agent.name} resume`
+                              : `Chat with ${agent.name} about this application`
+                          }
                         >
                           <MessageSquare className="h-3.5 w-3.5" />
                         </button>
@@ -2124,6 +2219,8 @@ export default function AgentsPage() {
           </div>
         )}
       </div>
+      {resumeChatOverlays}
+      </>
     );
   }
 
@@ -2337,6 +2434,7 @@ export default function AgentsPage() {
           )}
         </div>
       </div>
+      {resumeChatOverlays}
     </div>
   );
 }
