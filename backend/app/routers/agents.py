@@ -428,6 +428,7 @@ async def run_agent_task(
         additional_instructions=data.additional_instructions,
         ageism_shield=data.ageism_shield,
         overqualification_shield=data.overqualification_shield,
+        identity_shield=data.identity_shield,
     )
 
     try:

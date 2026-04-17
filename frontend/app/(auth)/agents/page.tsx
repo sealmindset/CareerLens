@@ -54,6 +54,7 @@ import {
   X,
   ClipboardCheck as ClipboardCheckIcon,
   Sparkles,
+  Fingerprint,
   ShieldCheck,
   SendHorizonal,
   TriangleAlert,
@@ -229,6 +230,9 @@ export default function AgentsPage() {
 
   // Export state
   const [exporting, setExporting] = useState(false);
+
+  // Identity Shield toggle (for Tailor agent -- ON by default)
+  const [identityShield, setIdentityShield] = useState(true);
 
   // Ageism Shield toggle (for Tailor agent)
   const [ageismShield, setAgeismShield] = useState(true);
@@ -628,11 +632,10 @@ export default function AgentsPage() {
     setTaskResult(null);
     try {
       const body: Record<string, unknown> = { agent_name: agentName };
-      if (agentName === "tailor" && ageismShield) {
-        body.ageism_shield = true;
-      }
-      if (agentName === "tailor" && overqualificationShield) {
-        body.overqualification_shield = true;
+      if (agentName === "tailor") {
+        body.identity_shield = identityShield;
+        if (ageismShield) body.ageism_shield = true;
+        if (overqualificationShield) body.overqualification_shield = true;
       }
       const result = await apiPost<AgentTaskResult>(
         `/agents/workspaces/${workspace.id}/run-agent`,
@@ -1156,6 +1159,45 @@ export default function AgentsPage() {
                           </div>
                         );
                       })()}
+
+                      {/* Identity Shield toggle (Tailor only -- ON by default) */}
+                      {agent.key === "tailor" && (
+                        <label
+                          className="flex items-center gap-2 mb-2 cursor-pointer rounded-md px-3 py-2 transition-colors"
+                          style={{
+                            backgroundColor: identityShield ? "rgba(16,185,129,0.08)" : "transparent",
+                            border: identityShield ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent",
+                          }}
+                        >
+                          <div
+                            className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors"
+                            style={{
+                              backgroundColor: identityShield ? "rgb(16,185,129)" : "var(--border)",
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setIdentityShield(!identityShield);
+                            }}
+                          >
+                            <span
+                              className="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform"
+                              style={{
+                                transform: identityShield ? "translate(17px, 2px)" : "translate(2px, 2px)",
+                              }}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium">Identity Shield</span>
+                            <p className="text-[10px] leading-tight" style={{ color: "var(--muted-foreground)" }}>
+                              Protect titles, summary, and seniority level from AI demotion
+                            </p>
+                          </div>
+                          <Fingerprint
+                            className="h-4 w-4 shrink-0"
+                            style={{ color: identityShield ? "rgb(16,185,129)" : "var(--muted-foreground)", opacity: identityShield ? 1 : 0.4 }}
+                          />
+                        </label>
+                      )}
 
                       {/* Ageism Shield toggle (Tailor only) */}
                       {agent.key === "tailor" && (

@@ -37,6 +37,7 @@ class AgentContext:
     additional_instructions: str | None = None
     ageism_shield: bool = False
     overqualification_shield: bool = False
+    identity_shield: bool = True  # ON by default
 
 
 async def load_agent_context(
@@ -47,6 +48,7 @@ async def load_agent_context(
     additional_instructions: str | None = None,
     ageism_shield: bool = False,
     overqualification_shield: bool = False,
+    identity_shield: bool = True,
 ) -> AgentContext:
     """Load all context data an agent might need."""
     # Load application with job
@@ -76,6 +78,7 @@ async def load_agent_context(
         additional_instructions=additional_instructions,
         ageism_shield=ageism_shield,
         overqualification_shield=overqualification_shield,
+        identity_shield=identity_shield,
     )
 
 

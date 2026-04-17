@@ -24,6 +24,7 @@ from app.models.story_bank import StoryBankStory
 from app.models.workspace import WorkspaceArtifact
 from app.services.agents.base import AgentContext, call_agent_ai
 from app.services.agents.ageism_shield import run_ageism_shield
+from app.services.agents.identity_shield import run_identity_shield
 from app.services.agents.overqualification_shield import run_overqualification_shield
 from app.services.workspace_service import save_artifact
 
@@ -227,7 +228,8 @@ async def run_tailor_task(context: AgentContext) -> list[WorkspaceArtifact]:
         )
 
     # Task 1: Tailored Resume
-    resume_prompt = f"""Rewrite the candidate's resume specifically tailored for this job listing.
+    resume_prompt = f"""Adapt the candidate's resume for this job listing by adding relevant
+bullets and keywords -- NOT by rewriting or downgrading existing content.
 {variant_context}
 {story_context}
 
@@ -238,8 +240,11 @@ The resume should look exactly like what a candidate would submit -- nothing mor
 
 RULES:
 - NEVER fabricate experience, skills, achievements, coursework, or education details
-- Reframe existing experience to highlight relevance to this specific role
-- Use keywords and phrases from the job description naturally
+- NEVER change any job title -- use the EXACT titles from the profile/variant
+- Keep the Professional Summary substantially the same -- you may add 1 sentence
+  connecting the candidate's expertise to this role, but do NOT rewrite it
+- Add bullets from Story Bank that fill gaps in the job requirements
+- Add keywords from the job description naturally into existing bullets where truthful
 - Quantify achievements where the data exists (don't invent numbers)
 - Optimize for ATS (Applicant Tracking Systems) by including exact keyword matches
 - Maintain the candidate's authentic voice
@@ -247,15 +252,20 @@ RULES:
 - NO blockquotes (lines starting with ">") anywhere in the output
 
 STRUCTURE the tailored resume as:
-1. **Professional Summary** -- 3-4 sentences tailored to this role
+1. **Professional Summary** -- keep the candidate's existing summary, optionally
+   append 1 connecting sentence
 2. **Key Skills** -- organized by relevance to the job requirements
-3. **Professional Experience** -- each role reframed for relevance, most recent first
-4. **Education** -- list ONLY what appears in the profile data (institution, degree, field of study). NEVER add coursework, honors, or achievements that are not explicitly provided. If a degree or field is missing, list only the institution name.
+3. **Professional Experience** -- keep all original titles and companies UNCHANGED.
+   Add relevant bullets from Story Bank. Enhance existing bullets with job-specific
+   keywords where truthful. Most recent first.
+4. **Education** -- list ONLY what appears in the profile data (institution, degree,
+   field of study). NEVER add coursework, honors, or achievements that are not
+   explicitly provided. If a degree or field is missing, list only the institution name.
 5. **Additional** -- certifications, projects, or other relevant items
 
 For each experience entry, include:
-- The original title and company (unchanged)
-- Rewritten bullet points that emphasize relevance to the target role
+- The EXACT original title and company (never changed)
+- Original bullets enhanced with relevant keywords + new bullets from Story Bank
 
 Format as clean markdown ready to be converted to a professional document."""
 
@@ -391,6 +401,20 @@ Return your evaluation as a JSON object (no markdown fencing):
             artifacts.append(eval_artifact)
         except Exception as e:
             logger.warning("Resume evaluation failed: %s", e)
+
+    # Identity Shield post-pass (ON by default)
+    if context.identity_shield:
+        try:
+            id_artifacts = await run_identity_shield(context, resume_response)
+            artifacts.extend(id_artifacts)
+            # If identity-protected resume was produced, use it as the base for
+            # subsequent shields so they don't re-introduce violations
+            for art in id_artifacts:
+                if art.artifact_type == "identity_protected_resume":
+                    resume_response = art.content
+                    break
+        except Exception as e:
+            logger.warning("Identity Shield failed: %s", e)
 
     # Ageism Shield post-pass (when enabled)
     if context.ageism_shield:
