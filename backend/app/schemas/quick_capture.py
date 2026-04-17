@@ -28,7 +28,7 @@ class QuickCaptureOut(BaseModel):
 
 class QuickCaptureProcessResult(BaseModel):
     capture: QuickCaptureOut
-    classification: str  # event, tasks, info
+    classification: str  # full_jd, event, tasks, info
     tasks_created: list[TaskOut] = []
     event_created: EventOut | None = None
     summary: str | None = None

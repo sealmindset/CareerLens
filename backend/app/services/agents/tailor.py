@@ -237,7 +237,7 @@ explanations, blockquotes, or "why this matters" annotations. No text that start
 The resume should look exactly like what a candidate would submit -- nothing more.
 
 RULES:
-- NEVER fabricate experience, skills, or achievements
+- NEVER fabricate experience, skills, achievements, coursework, or education details
 - Reframe existing experience to highlight relevance to this specific role
 - Use keywords and phrases from the job description naturally
 - Quantify achievements where the data exists (don't invent numbers)
@@ -250,7 +250,7 @@ STRUCTURE the tailored resume as:
 1. **Professional Summary** -- 3-4 sentences tailored to this role
 2. **Key Skills** -- organized by relevance to the job requirements
 3. **Professional Experience** -- each role reframed for relevance, most recent first
-4. **Education** -- highlight relevant coursework or achievements
+4. **Education** -- list ONLY what appears in the profile data (institution, degree, field of study). NEVER add coursework, honors, or achievements that are not explicitly provided. If a degree or field is missing, list only the institution name.
 5. **Additional** -- certifications, projects, or other relevant items
 
 For each experience entry, include:

@@ -24,15 +24,21 @@ FALLBACK_PROMPT = (
     "Given a raw note, determine its classification and extract tasks:\n\n"
     "## Classification\n"
     "Classify the note as ONE of:\n"
-    "- **event**: Contains a scheduled meeting, interview, or call with a specific time\n"
+    "- **full_jd**: Contains a job description, job posting, or recruiter message with role "
+    "details, responsibilities, requirements, or qualifications. This includes recruiter DMs "
+    "from LinkedIn that contain a position overview and/or detailed requirements.\n"
+    "- **event**: Contains a scheduled meeting, interview, or call with a specific time "
+    "(but NOT a full job description — short notes about scheduling only)\n"
     "- **tasks**: Contains action items, to-dos, or follow-ups\n"
     "- **info**: General information with no actionable tasks\n\n"
+    "IMPORTANT: If the note contains BOTH a job description AND scheduling info, "
+    "classify as **full_jd** (not event). The JD is the primary content.\n\n"
     "## Task Extraction\n"
     "For each actionable item, extract:\n"
     "- title, priority (urgent/important/normal/low), due_date (YYYY-MM-DD), "
     "due_reason, application_hint (company name or null)\n\n"
     "Return JSON only:\n"
-    '{"classification": "event"|"tasks"|"info", "summary": "...", '
+    '{"classification": "full_jd"|"event"|"tasks"|"info", "summary": "...", '
     '"tasks": [{"title": "...", "priority": "...", "due_date": "...", '
     '"due_reason": "...", "application_hint": null}]}'
 )
@@ -123,9 +129,24 @@ async def process_capture(
         )
         tasks_created.append(task)
 
-    # 3. If classified as event, also delegate to command_center
+    # 3. If classified as event or full_jd, delegate to command_center
+    #    Also apply a heuristic: long notes (>500 chars) with JD-like keywords
+    #    should always go through create_from_note() even if AI misclassifies.
     event_created = None
-    if classification == "event":
+    should_create_event = classification in ("event", "full_jd")
+    if not should_create_event and len(capture.raw_text) > 500:
+        jd_signals = [
+            "responsibilities", "requirements", "qualifications",
+            "about the role", "job description", "position overview",
+            "must have", "nice to have", "years of experience",
+        ]
+        text_lower = capture.raw_text.lower()
+        if sum(1 for s in jd_signals if s in text_lower) >= 2:
+            should_create_event = True
+            classification = "full_jd"
+            logger.info("Overriding classification to full_jd (heuristic match)")
+
+    if should_create_event:
         try:
             event_created = await create_from_note(db, user_id, capture.raw_text)
         except Exception as exc:
@@ -150,7 +171,22 @@ async def process_capture(
     await db.refresh(capture)
 
     # 5. Notify user
-    if tasks_created:
+    if event_created and classification == "full_jd":
+        await create_notification(
+            db,
+            title="JARVIS processed a full job description",
+            notification_type="STATUS_CHANGE",
+            recipient_id=user_id,
+            message=(
+                f"Job listing, application, and event created. "
+                f"{'Also extracted ' + str(len(tasks_created)) + ' task(s). ' if tasks_created else ''}"
+                f"Head to Application Studio to run Scout and Tailor."
+            ),
+            related_entity_type="quick_capture",
+            related_entity_id=capture.id,
+            sent_by="JARVIS",
+        )
+    elif tasks_created:
         await create_notification(
             db,
             title=f"JARVIS extracted {len(tasks_created)} task(s) from your note",

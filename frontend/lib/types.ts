@@ -613,6 +613,7 @@ export interface Event {
   location: string | null;
   prep_status: string;
   raw_note: string | null;
+  parsed_data: Record<string, unknown> | null;
   notes: string | null;
   reminder_sent: boolean;
   created_at: string;
