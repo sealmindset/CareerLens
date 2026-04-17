@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased] - 2026-04-16
+
+### Fixed
+- **Quick Capture → Job Listing pipeline**: Recruiter DMs and full JD pastes now correctly create Job Listings. Added `full_jd` as a 4th Quick Capture classification (alongside event/tasks/info). Includes a heuristic fallback for long notes with JD-like keywords in case AI misclassifies.
+- **Tailor education fabrication**: Tailor was inventing coursework (e.g., "Relevant Coursework: Quantitative Analysis...") for education records with no degree/field on file. Now strictly lists only what appears in the profile.
+- **Scout false gap reports**: Story Bank entries were invisible to Scout, causing skills the user had confirmed (e.g., Snyk) to be reported as gaps. Story Bank context is now injected into all agent prompts via `call_agent_ai()`.
+
+### Added
+- **Skill Outlier Detection**: After Quick Capture processes a full JD, automatically checks each requirement against the user's profile and Story Bank. Requirements not found anywhere show an orange warning with an "I have this" button — user describes their experience, AI structures it into a PSD Story Bank entry, which Tailor picks up automatically.
+- **Identity Shield** (Tailor, ON by default): AI-powered post-pass that detects and corrects identity violations — title demotions (Architect → Engineer), professional summary rewrites, and missing high-seniority titles. Produces `identity_shield_report` and `identity_protected_resume` artifacts. Runs before Ageism and Overqualification shields. Green fingerprint toggle in Application Studio.
+- Migration 033: updates `jarvis-note-parser` managed prompt with dual-mode JD/quick-note support
+- Migration 034: seeds `jarvis-outlier-structurer` managed prompt for Story Bank PSD structuring
+- Migration 035: updates `jarvis-task-extractor` managed prompt with `full_jd` classification
+
 ## [0.22.0] - 2026-04-13
 
 ### Added
