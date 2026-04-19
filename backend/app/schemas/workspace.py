@@ -98,6 +98,12 @@ class AgentTaskResult(BaseModel):
     preflight_warnings: list[PreflightItem] = []
 
 
+class SkillGapCheckResult(BaseModel):
+    """Result of a skill gap check against the user's profile and Story Bank."""
+    artifact_id: str
+    requirements: list[dict]
+
+
 # --- Application Form schemas (Auto-Fill modal) ---
 
 class ApplicationFormField(BaseModel):

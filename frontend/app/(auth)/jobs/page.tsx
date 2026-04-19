@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiDelete } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DataTable } from "@/components/data-table";
 import { DataTableColumnHeader } from "@/components/data-table-column-header";
@@ -29,6 +29,7 @@ import {
   KeyRound,
   HelpCircle,
   Rocket,
+  Trash2,
 } from "lucide-react";
 
 const statusColors: Record<string, { bg: string; text: string }> = {
@@ -82,6 +83,7 @@ export default function JobsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   // Add job form
   const [addUrl, setAddUrl] = useState("");
@@ -113,6 +115,7 @@ export default function JobsPage() {
   const [activeSuggestionIdx, setActiveSuggestionIdx] = useState(0);
 
   const canCreate = hasPermission("jobs", "create");
+  const canDelete = hasPermission("jobs", "delete");
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -243,6 +246,34 @@ export default function JobsPage() {
 
   const openInStudio = (job: JobListing) => {
     router.push(`/agents?job=${job.id}`);
+  };
+
+  const deleteJob = async (job: JobListing) => {
+    const confirmMsg =
+      `Delete "${job.title}" at ${job.company}?\n\n` +
+      `This also removes its application and every workspace artifact ` +
+      `(tailored/amplified resumes, match analysis, etc.) from Application ` +
+      `Studio. This cannot be undone.`;
+    if (!confirm(confirmMsg)) return;
+    setDeletingIds((prev) => new Set(prev).add(job.id));
+    try {
+      await apiDelete(`/jobs/${job.id}`);
+      setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      if (expandedId === job.id) setExpandedId(null);
+    } catch (err) {
+      console.error("Failed to delete job:", err);
+      alert(
+        err instanceof Error
+          ? `Delete failed: ${err.message}`
+          : "Delete failed. Please try again.",
+      );
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(job.id);
+        return next;
+      });
+    }
   };
 
   const runDiscover = async () => {
@@ -441,12 +472,27 @@ export default function JobsPage() {
                   <ExternalLink className="h-3 w-3" />
                 </a>
               )}
+              {canDelete && (
+                <button
+                  onClick={() => deleteJob(job)}
+                  disabled={deletingIds.has(job.id)}
+                  className="inline-flex items-center rounded-md p-1 transition-colors hover:bg-red-50 disabled:opacity-50"
+                  style={{ color: "rgb(220,38,38)" }}
+                  title="Delete job"
+                >
+                  {deletingIds.has(job.id) ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </button>
+              )}
             </div>
           );
         },
       },
     ],
-    [expandedId, analyzingIds],
+    [expandedId, analyzingIds, deletingIds, canDelete],
   );
 
   if (loading) {
@@ -904,13 +950,26 @@ export default function JobsPage() {
           }}
         >
           <div className="flex items-start justify-between mb-4">
-            <div>
+            <div className="min-w-0">
               <h2 className="text-lg font-semibold">{expandedJob.title}</h2>
               <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                 {expandedJob.company}
                 {expandedJob.location && ` -- ${expandedJob.location}`}
                 {expandedJob.salary_range && ` -- ${expandedJob.salary_range}`}
               </p>
+              {expandedJob.url && (
+                <a
+                  href={expandedJob.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 text-xs hover:underline"
+                  style={{ color: "var(--primary)" }}
+                  title={expandedJob.url}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span className="truncate max-w-[32rem]">View original posting</span>
+                </a>
+              )}
             </div>
             <button
               onClick={() => setExpandedId(null)}

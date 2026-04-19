@@ -1,0 +1,230 @@
+{
+  "results": [
+    {
+      "user": "Super Admin",
+      "test": "login",
+      "pass": true,
+      "url": "http://localhost:3300/command-center"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:dashboard",
+      "pass": true,
+      "url": "http://localhost:3300/dashboard"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:jobs",
+      "pass": true,
+      "url": "http://localhost:3300/jobs"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:agents",
+      "pass": true,
+      "url": "http://localhost:3300/agents"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:interview-questions",
+      "pass": true,
+      "url": "http://localhost:3300/interview-questions"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:profile",
+      "pass": true,
+      "url": "http://localhost:3300/profile"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:applications",
+      "pass": true,
+      "url": "http://localhost:3300/agents"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:resumes",
+      "pass": true,
+      "url": "http://localhost:3300/resumes"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:stories",
+      "pass": true,
+      "url": "http://localhost:3300/stories"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:analytics",
+      "pass": true,
+      "url": "http://localhost:3300/analytics"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:command-center",
+      "pass": true,
+      "url": "http://localhost:3300/command-center"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:admin-users",
+      "pass": false,
+      "error": "page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3300/admin/users\", waiting until \"networkidle\"\u001b[22m\n"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:admin-roles",
+      "pass": false,
+      "error": "page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3300/admin/roles\", waiting until \"networkidle\"\u001b[22m\n"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:admin-settings",
+      "pass": false,
+      "error": "page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3300/admin/settings\", waiting until \"networkidle\"\u001b[22m\n"
+    },
+    {
+      "user": "Super Admin",
+      "test": "page:admin-prompts",
+      "pass": false,
+      "error": "page.goto: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3300/admin/prompts\", waiting until \"networkidle\"\u001b[22m\n"
+    },
+    {
+      "user": "Pro User",
+      "test": "login",
+      "pass": true,
+      "url": "http://localhost:3300/command-center"
+    },
+    {
+      "user": "Pro User",
+      "test": "page:dashboard",
+      "pass": true,
+      "url": "http://localhost:3300/dashboard"
+    },
+    {
+      "user": "Pro User",
+      "test": "page:jobs",
+      "pass": true,
+      "url": "http://localhost:3300/jobs"
+    },
+    {
+      "user": "Pro User",
+      "test": "page:agents",
+      "pass": true,
+      "url": "http://localhost:3300/agents"
+    },
+    {
+      "user": "Pro User",
+      "test": "page:interview-questions",
+      "pass": true,
+      "url": "http://localhost:3300/interview-questions"
+    },
+    {
+      "user": "Pro User",
+      "test": "page:profile",
+      "pass": true,
+      "url": "http://localhost:3300/profile"
+    },
+    {
+      "user": "Pro User",
+      "test": "page:applications",
+      "pass": true,
+      "url": "http://localhost:3300/agents"
+    },
+    {
+      "user": "Pro User",
+      "test": "page:resumes",
+      "pass": true,
+      "url": "http://localhost:3300/resumes"
+    },
+    {
+      "user": "Pro User",
+      "test": "page:stories",
+      "pass": true,
+      "url": "http://localhost:3300/stories"
+    },
+    {
+      "user": "Pro User",
+      "test": "page:analytics",
+      "pass": true,
+      "url": "http://localhost:3300/analytics"
+    },
+    {
+      "user": "Pro User",
+      "test": "page:command-center",
+      "pass": true,
+      "url": "http://localhost:3300/command-center"
+    },
+    {
+      "user": "User",
+      "test": "login",
+      "pass": true,
+      "url": "http://localhost:3300/command-center"
+    },
+    {
+      "user": "User",
+      "test": "page:dashboard",
+      "pass": true,
+      "url": "http://localhost:3300/dashboard"
+    },
+    {
+      "user": "User",
+      "test": "page:jobs",
+      "pass": true,
+      "url": "http://localhost:3300/jobs"
+    },
+    {
+      "user": "User",
+      "test": "page:agents",
+      "pass": true,
+      "url": "http://localhost:3300/agents"
+    },
+    {
+      "user": "User",
+      "test": "page:interview-questions",
+      "pass": true,
+      "url": "http://localhost:3300/interview-questions"
+    },
+    {
+      "user": "User",
+      "test": "page:profile",
+      "pass": true,
+      "url": "http://localhost:3300/profile"
+    },
+    {
+      "user": "User",
+      "test": "page:applications",
+      "pass": true,
+      "url": "http://localhost:3300/agents"
+    },
+    {
+      "user": "User",
+      "test": "page:resumes",
+      "pass": true,
+      "url": "http://localhost:3300/resumes"
+    },
+    {
+      "user": "User",
+      "test": "page:stories",
+      "pass": true,
+      "url": "http://localhost:3300/stories"
+    },
+    {
+      "user": "User",
+      "test": "page:analytics",
+      "pass": true,
+      "url": "http://localhost:3300/analytics"
+    },
+    {
+      "user": "User",
+      "test": "page:command-center",
+      "pass": true,
+      "url": "http://localhost:3300/command-center"
+    }
+  ],
+  "passed": 33,
+  "failed": 4,
+  "total": 37,
+  "timestamp": "2026-04-19T20:23:33.510Z"
+}

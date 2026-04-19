@@ -21,6 +21,7 @@ import type {
   ChatbotQuestionItem,
   ChatbotSimulationResult,
   ChatbotSubmitResult,
+  EnrichedRequirement,
   JobListing,
   PreflightResult,
   AgentTaskResult,
@@ -67,7 +68,21 @@ import {
   Mail,
   Gavel,
   ShieldAlert,
+  Mic,
+  ExternalLink,
+  Check,
+  AlertTriangle,
+  BookPlus,
 } from "lucide-react";
+
+const INTERVIEW_STAGES: { value: string; label: string }[] = [
+  { value: "recruiter_screen", label: "Recruiter Screen" },
+  { value: "phone_screen", label: "Phone Screen" },
+  { value: "hiring_manager", label: "Hiring Manager" },
+  { value: "technical", label: "Technical" },
+  { value: "panel", label: "Panel" },
+  { value: "final", label: "Final" },
+];
 
 interface AgentDef {
   name: string;
@@ -168,6 +183,14 @@ const agents: AgentDef[] = [
     color: "rgb(217,119,6)",
   },
   {
+    name: "Interview Prep Coach",
+    key: "interview_prep_coach",
+    icon: Mic,
+    description: "Stage-tailored prep brief, flashcards, STAR drafts, and a mock-interview chat — drawn from your question bank, stories, and profile.",
+    modelTier: "standard",
+    color: "rgb(244,63,94)",
+  },
+  {
     name: "Coordinator",
     key: "coordinator",
     icon: ClipboardList,
@@ -242,6 +265,10 @@ export default function AgentsPage() {
   // Overqualification Shield toggle (for Tailor agent)
   const [overqualificationShield, setOverqualificationShield] = useState(false);
 
+  // Interview Prep Coach stage + notes
+  const [interviewStage, setInterviewStage] = useState("recruiter_screen");
+  const [interviewNotes, setInterviewNotes] = useState("");
+
   // Workspace state
   const [jobListings, setJobListings] = useState<JobListing[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -267,6 +294,15 @@ export default function AgentsPage() {
   // Interview Verdict state
   const [verdictRunning, setVerdictRunning] = useState(false);
   const [verdictExpanded, setVerdictExpanded] = useState<Set<string>>(new Set());
+
+  // Skill Gap Check state
+  const [skillGapResults, setSkillGapResults] = useState<import("@/lib/types").EnrichedRequirement[] | null>(null);
+  const [checkingSkillGaps, setCheckingSkillGaps] = useState(false);
+  const [skillGapConfirmIdx, setSkillGapConfirmIdx] = useState<number | null>(null);
+  const [skillGapDesc, setSkillGapDesc] = useState("");
+  const [skillGapCompany, setSkillGapCompany] = useState("");
+  const [skillGapRepo, setSkillGapRepo] = useState("");
+  const [savingSkillGap, setSavingSkillGap] = useState(false);
 
   // Auto-Fill modal state
   const [showAutoFillModal, setShowAutoFillModal] = useState(false);
@@ -633,6 +669,8 @@ export default function AgentsPage() {
     setPreflights([]);
     setTaskResult(null);
     setSelectedArtifact(null);
+    setSkillGapResults(null);
+    setSkillGapConfirmIdx(null);
 
     try {
       // Find existing application or create one
@@ -662,6 +700,16 @@ export default function AgentsPage() {
       // Load preflights for all agents
       const pf = await apiGet<PreflightResult[]>(`/agents/preflight/all/${app.id}`);
       setPreflights(pf);
+
+      // Restore persisted skill gap results from latest artifact
+      const sgArtifact = ws.artifacts
+        ?.filter((a: WorkspaceArtifact) => a.artifact_type === "skill_gap_check")
+        .sort((a: WorkspaceArtifact, b: WorkspaceArtifact) => b.version - a.version)[0];
+      if (sgArtifact) {
+        try {
+          setSkillGapResults(JSON.parse(sgArtifact.content));
+        } catch { /* ignore parse errors */ }
+      }
     } catch (err) {
       console.error("Failed to load workspace:", err);
     } finally {
@@ -679,6 +727,12 @@ export default function AgentsPage() {
         body.identity_shield = identityShield;
         if (ageismShield) body.ageism_shield = true;
         if (overqualificationShield) body.overqualification_shield = true;
+      }
+      if (agentName === "interview_prep_coach") {
+        const notes = interviewNotes.trim();
+        body.additional_instructions = notes
+          ? `Stage: ${interviewStage}\n\n${notes}`
+          : `Stage: ${interviewStage}`;
       }
       const result = await apiPost<AgentTaskResult>(
         `/agents/workspaces/${workspace.id}/run-agent`,
@@ -699,6 +753,52 @@ export default function AgentsPage() {
       console.error("Agent run failed:", err);
     } finally {
       setRunningAgent(null);
+    }
+  };
+
+  const checkSkillGaps = async () => {
+    if (!workspace) return;
+    setCheckingSkillGaps(true);
+    setSkillGapResults(null);
+    setSkillGapConfirmIdx(null);
+    try {
+      const result = await apiPost<{ artifact_id: string; requirements: EnrichedRequirement[] }>(
+        `/agents/workspaces/${workspace.id}/check-skill-gaps`,
+        {},
+      );
+      setSkillGapResults(result.requirements);
+      // Refresh workspace so the artifact shows up in the list
+      const ws = await apiGet<AgentWorkspace>(`/agents/workspaces/${workspace.id}`);
+      setWorkspace(ws);
+    } catch (err) {
+      console.error("Skill gap check failed:", err);
+    } finally {
+      setCheckingSkillGaps(false);
+    }
+  };
+
+  const handleConfirmSkillGap = async (idx: number, req: EnrichedRequirement) => {
+    if (!skillGapDesc.trim()) return;
+    setSavingSkillGap(true);
+    try {
+      await apiPost("/events/confirm-outlier", {
+        requirement_text: req.text,
+        skill_name: req.text.split(",")[0].trim().slice(0, 80),
+        description: skillGapDesc,
+        company: skillGapCompany || null,
+        repo_url: skillGapRepo || null,
+      });
+      setSkillGapResults((prev) =>
+        prev?.map((r, i) => i === idx ? { ...r, outlier: false, matched_in: "story_bank" } : r) ?? null,
+      );
+      setSkillGapConfirmIdx(null);
+      setSkillGapDesc("");
+      setSkillGapCompany("");
+      setSkillGapRepo("");
+    } catch (err) {
+      console.error("Confirm outlier failed:", err);
+    } finally {
+      setSavingSkillGap(false);
     }
   };
 
@@ -1084,6 +1184,19 @@ export default function AgentsPage() {
                       </span>
                     )}
                   </p>
+                  {selectedJob.url && (
+                    <a
+                      href={selectedJob.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs hover:underline"
+                      style={{ color: "var(--primary)" }}
+                      title={selectedJob.url}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      <span className="truncate max-w-[28rem]">View original posting</span>
+                    </a>
+                  )}
                 </div>
                 <button
                   onClick={() => { setWorkspace(null); setSelectedAppId(null); setSelectedJob(null); }}
@@ -1135,6 +1248,139 @@ export default function AgentsPage() {
                 </p>
               )}
             </div>
+
+            {/* Skill Gap Check section */}
+            {selectedJob && selectedJob.requirements && selectedJob.requirements.length > 0 && (
+              <div
+                className="rounded-lg border p-4 mb-6"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" style={{ color: "rgb(234,179,8)" }} />
+                    <h3 className="font-semibold text-sm">Skill Gap Check</h3>
+                    {skillGapResults && !checkingSkillGaps && (
+                      <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                        {skillGapResults.filter((r) => r.outlier).length} gap{skillGapResults.filter((r) => r.outlier).length !== 1 ? "s" : ""} of {skillGapResults.length} requirements
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={checkSkillGaps}
+                    disabled={checkingSkillGaps}
+                    className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {checkingSkillGaps ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" /> Checking...</>
+                    ) : skillGapResults ? (
+                      <><Zap className="h-3 w-3" /> Re-check</>
+                    ) : (
+                      <><Zap className="h-3 w-3" /> Check Skill Gaps</>
+                    )}
+                  </button>
+                </div>
+                {!skillGapResults && !checkingSkillGaps && (
+                  <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                    Compare this job&apos;s {selectedJob.requirements.length} requirements against your profile and Story Bank.
+                  </p>
+                )}
+                {skillGapResults && (
+                  <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                    {skillGapResults.map((req, idx) => (
+                      <div key={idx}>
+                        <div className="flex items-start gap-2 text-sm">
+                          {!req.outlier ? (
+                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+                          ) : (
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
+                          )}
+                          <span
+                            className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                              req.type === "required"
+                                ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                : req.type === "preferred"
+                                  ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                  : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            }`}
+                          >
+                            {req.type === "nice_to_have" ? "Bonus" : req.type === "preferred" ? "Pref" : "Req"}
+                          </span>
+                          <span className="flex-1">{req.text}</span>
+                          {!req.outlier && req.matched_in && (
+                            <span className="shrink-0 text-[10px] text-green-600">
+                              {req.matched_in === "story_bank" ? "Story Bank" : "Profile"}
+                            </span>
+                          )}
+                          {req.outlier && skillGapConfirmIdx !== idx && (
+                            <button
+                              onClick={() => {
+                                setSkillGapConfirmIdx(idx);
+                                setSkillGapDesc("");
+                                setSkillGapCompany("");
+                                setSkillGapRepo("");
+                              }}
+                              className="shrink-0 inline-flex items-center gap-1 rounded-md border border-orange-300 px-2 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                            >
+                              <BookPlus className="h-3 w-3" />
+                              I have this
+                            </button>
+                          )}
+                        </div>
+                        {skillGapConfirmIdx === idx && req.outlier && (
+                          <div className="ml-6 mt-2 rounded-lg border border-orange-200 bg-orange-50/50 p-3 dark:border-orange-800 dark:bg-orange-950/20">
+                            <p className="text-xs font-medium mb-2">Describe your experience:</p>
+                            <textarea
+                              value={skillGapDesc}
+                              onChange={(e) => setSkillGapDesc(e.target.value)}
+                              placeholder="e.g., I operationalized this at Acme — set it up, managed onboarding..."
+                              rows={3}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground"
+                            />
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] font-medium text-muted-foreground">Company (optional)</label>
+                                <input
+                                  type="text"
+                                  value={skillGapCompany}
+                                  onChange={(e) => setSkillGapCompany(e.target.value)}
+                                  className="mt-0.5 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-medium text-muted-foreground">Repo / Portfolio URL (optional)</label>
+                                <input
+                                  type="text"
+                                  value={skillGapRepo}
+                                  onChange={(e) => setSkillGapRepo(e.target.value)}
+                                  className="mt-0.5 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+                                />
+                              </div>
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <button
+                                onClick={() => handleConfirmSkillGap(idx, req)}
+                                disabled={savingSkillGap || !skillGapDesc.trim()}
+                                className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                              >
+                                {savingSkillGap ? <Loader2 className="h-3 w-3 animate-spin" /> : <BookPlus className="h-3 w-3" />}
+                                Save to Story Bank
+                              </button>
+                              <button
+                                onClick={() => setSkillGapConfirmIdx(null)}
+                                className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+                              >
+                                Skip
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Agent cards with preflight + run buttons */}
             <div>
@@ -1365,6 +1611,40 @@ export default function AgentsPage() {
                             style={{ color: overqualificationShield ? "rgb(217,119,6)" : "var(--muted-foreground)", opacity: overqualificationShield ? 1 : 0.4 }}
                           />
                         </label>
+                      )}
+
+                      {/* Interview Prep Coach: stage picker + notes */}
+                      {agent.key === "interview_prep_coach" && (
+                        <div className="mb-2 space-y-2">
+                          <div>
+                            <label className="text-xs font-medium mb-1 block">
+                              Interview stage
+                            </label>
+                            <select
+                              value={interviewStage}
+                              onChange={(e) => setInterviewStage(e.target.value)}
+                              className="w-full rounded-md border px-2 py-1.5 text-xs"
+                              style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                            >
+                              {INTERVIEW_STAGES.map((s) => (
+                                <option key={s.value} value={s.value}>{s.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium mb-1 block">
+                              Notes (optional)
+                            </label>
+                            <textarea
+                              value={interviewNotes}
+                              onChange={(e) => setInterviewNotes(e.target.value)}
+                              rows={2}
+                              placeholder="E.g., Monday call, expect comp/notice questions"
+                              className="w-full rounded-md border px-2 py-1.5 text-xs resize-none"
+                              style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                            />
+                          </div>
+                        </div>
                       )}
 
                       <div className="flex gap-2">
@@ -1815,6 +2095,106 @@ export default function AgentsPage() {
                     <pre className="text-xs leading-relaxed" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                       <code>{selectedArtifact.content}</code>
                     </pre>
+                  ) : selectedArtifact.artifact_type === "interview_flashcards" ? (
+                    (() => {
+                      let cards: { q: string; a: string; tag?: string }[] = [];
+                      try {
+                        const parsed = JSON.parse(selectedArtifact.content);
+                        if (Array.isArray(parsed)) cards = parsed;
+                      } catch {
+                        // fall through to empty list
+                      }
+                      if (cards.length === 0) {
+                        return (
+                          <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                            No flashcards found.
+                          </p>
+                        );
+                      }
+                      return (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {cards.map((card, idx) => (
+                            <div
+                              key={idx}
+                              className="rounded-lg border p-3"
+                              style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+                            >
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>
+                                  Card {idx + 1}
+                                </span>
+                                {card.tag && (
+                                  <span
+                                    className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                                    style={{ backgroundColor: "rgba(244,63,94,0.1)", color: "rgb(244,63,94)" }}
+                                  >
+                                    {card.tag}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs font-semibold mb-1.5">{card.q}</p>
+                              <p className="text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+                                {card.a}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()
+                  ) : selectedArtifact.artifact_type === "skill_gap_check" ? (
+                    (() => {
+                      let reqs: EnrichedRequirement[] = [];
+                      try {
+                        const parsed = JSON.parse(selectedArtifact.content);
+                        if (Array.isArray(parsed)) reqs = parsed;
+                      } catch { /* ignore */ }
+                      if (reqs.length === 0) {
+                        return (
+                          <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                            No requirements found.
+                          </p>
+                        );
+                      }
+                      const gaps = reqs.filter((r) => r.outlier).length;
+                      return (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
+                            {gaps} gap{gaps !== 1 ? "s" : ""} of {reqs.length} requirements
+                          </p>
+                          <div className="space-y-1">
+                            {reqs.map((req, idx) => (
+                              <div key={idx} className="flex items-start gap-2 text-xs">
+                                {!req.outlier ? (
+                                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-600" />
+                                ) : (
+                                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
+                                )}
+                                <span
+                                  className={`mt-0.5 shrink-0 rounded px-1 py-0.5 text-[9px] font-medium ${
+                                    req.type === "required"
+                                      ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                      : req.type === "preferred"
+                                        ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                        : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                  }`}
+                                >
+                                  {req.type === "nice_to_have" ? "Bonus" : req.type === "preferred" ? "Pref" : "Req"}
+                                </span>
+                                <span className="flex-1">{req.text}</span>
+                                {!req.outlier && req.matched_in && (
+                                  <span className="shrink-0 text-[10px] text-green-600">
+                                    {req.matched_in === "story_bank" ? "Story Bank" : "Profile"}
+                                  </span>
+                                )}
+                                {req.outlier && (
+                                  <span className="shrink-0 text-[10px] text-orange-500">Gap</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()
                   ) : selectedArtifact.content_format === "json" ? (
                     <pre className="text-xs leading-relaxed" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                       <code>{(() => { try { return JSON.stringify(JSON.parse(selectedArtifact.content), null, 2); } catch { return selectedArtifact.content; } })()}</code>

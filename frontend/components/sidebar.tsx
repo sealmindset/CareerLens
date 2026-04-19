@@ -14,6 +14,7 @@ import {
   Bot,
   CalendarClock,
   BookOpen,
+  MessageCircleQuestion,
   UserCircle,
   MessageSquareCode,
   SlidersHorizontal,
@@ -67,6 +68,12 @@ const mainNavItems: NavItem[] = [
     href: "/stories",
     icon: BookOpen,
     permission: { resource: "stories", action: "view" },
+  },
+  {
+    label: "Interview Questions",
+    href: "/interview-questions",
+    icon: MessageCircleQuestion,
+    permission: { resource: "interview_questions", action: "view" },
   },
   {
     label: "Analytics",

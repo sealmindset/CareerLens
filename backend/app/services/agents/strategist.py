@@ -21,27 +21,59 @@ async def run_strategist_task(context: AgentContext) -> list[WorkspaceArtifact]:
     """Run the Strategist agent's cover letter and strategy task."""
 
     # Task 1: Cover Letter
-    cover_prompt = """Write a compelling, personalized cover letter for this application.
+    cover_prompt = """Write a compelling, personalized cover letter that STANDS ON ITS OWN
+alongside the resume. The resume lists the facts. The cover letter does something different:
+it reads the room, names the problem, and paints a picture of the candidate solving it
+inside this team.
 
-RULES:
-- Write in the candidate's authentic voice (match the tone of their resume/summary)
-- Never fabricate achievements or experience
-- Be specific -- reference the company by name, the role, and specific requirements
-- Show genuine enthusiasm without being generic or sycophantic
-- Keep it to one page (350-450 words)
+## CORE DIRECTIVE — DO NOT REPEAT THE RESUME
 
-STRUCTURE:
-1. **Opening** -- Hook that connects the candidate to this specific role (not "I'm excited to apply...")
-2. **Value Proposition** -- 2-3 paragraphs demonstrating fit:
-   - Lead with strongest match to their top requirement
-   - Address a requirement where the candidate's experience adds unique value
-   - Show cultural fit or alignment with company mission
-3. **Closing** -- Confident close with clear call to action
+Assume the reader already has the resume in their other hand. NEVER restate:
+- Job titles, company names, dates, degrees, or certifications
+- Bullet-point accomplishments or metrics that already appear in the resume
+- Skill lists or technology inventories
 
-Include specific examples from the candidate's experience that demonstrate they can
-deliver on the role's key responsibilities.
+If a resume fact is essential to the argument, REFERENCE it in a single clause ("after a
+decade running security programs in regulated industries...") and move on — never
+re-describe it. The cover letter is a lens, not a summary.
 
-Format as a clean, professional cover letter (not markdown headers -- use letter format)."""
+## WHAT TO WRITE INSTEAD
+
+1. **Name the problem the JD is really solving.**
+   Read between the lines of the job description. What pain is the hiring team trying to
+   make go away? What shift, transition, scale, regulatory pressure, or team dysfunction
+   is this role secretly about? Lead with a crisp articulation of that underlying problem —
+   the one every bullet point in the JD is orbiting. This shows you understand the work
+   before you've walked in the door.
+
+2. **Connect the candidate to that problem.**
+   Show — don't list — how this candidate's shape of experience maps to the problem.
+   Use narrative: "The last time I saw this pattern was when..." or "What a team typically
+   misses in this situation is...". Draw on judgment, instinct, and perspective developed
+   over the career — things a resume cannot convey.
+
+3. **Position the candidate as the missing piece.**
+   Show how this candidate's specific shape of experience and expertise is what closes the
+   gap between where the team is and where the JD says they need to go. Not a list of
+   qualifications — a case that the problem in section 1 is exactly the kind of problem
+   this person has spent a career learning to solve. The reader should close the letter
+   thinking "this is the piece we've been missing."
+
+   Do NOT speculate about the first 30/60/90 days, conversations they'd start, or dynamics
+   they'd change. The letter is about why this candidate fits the problem, not a roadmap
+   for what they'd do in the seat.
+
+## RULES
+
+- Write in the candidate's authentic voice — match the cadence of their resume summary
+- Never fabricate experience, metrics, or specifics about the company
+- Reference the company and role by name, but avoid the "I'm excited to apply" opener
+- No bulleted lists inside the letter body — this is prose
+- No markdown headers — use letter format (salutation, paragraphs, sign-off)
+- One page, 350-450 words
+- Genuine, not sycophantic. Confident, not boastful.
+- The final paragraph is a confident, specific invitation to continue the conversation —
+  not a recap of what was just said"""
 
     cover_response = await call_agent_ai(
         context.db, "strategist", cover_prompt, context

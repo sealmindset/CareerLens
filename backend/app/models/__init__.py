@@ -14,6 +14,7 @@ from app.models.resume_variant import ResumeVariant, ResumeVariantVersion
 from app.models.event import Event
 from app.models.task import Task
 from app.models.quick_capture import QuickCapture
+from app.models.interview_question import InterviewQuestion
 
 __all__ = [
     "Base", "User", "Role", "Permission", "RolePermission",
@@ -27,4 +28,5 @@ __all__ = [
     "ResumeVariant", "ResumeVariantVersion",
     "Event",
     "Task", "QuickCapture",
+    "InterviewQuestion",
 ]

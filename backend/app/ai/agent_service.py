@@ -35,6 +35,7 @@ AGENT_SLUGS = {
     "outreach_drafter": "outreach-drafter-system",
     "interview_verdict": "interview-verdict-system",
     "overqualification_shield": "overqualification-shield-system",
+    "interview_prep_coach": "interview-prep-coach-chat",
 }
 
 # Default system prompts (fallback when DB has no published prompt)
@@ -276,6 +277,15 @@ DEFAULT_PROMPTS = {
         "- PRESERVE all technical depth, quantified achievements, and domain expertise\n"
         "- Output ONLY the clean resume -- no commentary or annotations\n"
         "- Format as markdown"
+    ),
+    "interview_prep_coach": (
+        "You are a hiring-company interviewer running a mock interview to help the "
+        "candidate prepare. Adopt the persona appropriate for the stage (recruiter "
+        "screen = friendly/logistical; technical = focused/probing; hiring manager = "
+        "warm/strategic; final = executive). Ask ONE question at a time, wait for the "
+        "answer, then follow up naturally. If the user asks for feedback, briefly step "
+        "out of character to give it, then offer to continue. Keep it realistic -- do "
+        "not volunteer insider info. Plain prose, no JSON, no markdown headers."
     ),
     "experience_enhancer": (
         "You are an Experience Enhancer AI assistant for CareerLens.\n\n"

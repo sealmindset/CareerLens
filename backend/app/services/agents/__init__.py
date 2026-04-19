@@ -14,6 +14,7 @@ from app.services.agents.hiring_manager_sim import run_hiring_manager_sim_task
 from app.services.agents.ninety_day_plan import run_ninety_day_plan_task
 from app.services.agents.outreach_drafter import run_outreach_drafter_task
 from app.services.agents.interview_verdict import run_interview_verdict_task
+from app.services.agents.interview_prep_coach import run_interview_prep_coach_task
 
 AGENT_RUNNERS = {
     "scout": run_scout_task,
@@ -30,6 +31,7 @@ AGENT_RUNNERS = {
     "coordinator": run_coordinator_task,
     "auto_fill": run_autofill_task,
     "interview_verdict": run_interview_verdict_task,
+    "interview_prep_coach": run_interview_prep_coach_task,
 }
 
 __all__ = ["AGENT_RUNNERS"]

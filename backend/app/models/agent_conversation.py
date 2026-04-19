@@ -10,14 +10,14 @@ from app.models.base import Base
 
 agent_name_enum = sa.Enum(
     "scout", "tailor", "coach", "strategist", "brand_advisor", "coordinator",
-    "achievement_amplifier",
+    "achievement_amplifier", "interview_prep_coach",
     name="agent_name",
     create_type=True,
 )
 
 context_type_enum = sa.Enum(
     "job_analysis", "resume_tailoring", "gap_interview", "brand_research",
-    "form_filling", "general", "resume_amplification",
+    "form_filling", "general", "resume_amplification", "interview_prep",
     name="context_type",
     create_type=True,
 )

@@ -4,7 +4,7 @@ from datetime import date, datetime
 import sqlalchemy as sa
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -65,5 +65,14 @@ class Application(Base):
 
     # Relationships
     user = relationship("User", backref="applications", lazy="selectin")
-    job_listing = relationship("JobListing", backref="application", lazy="selectin")
+    job_listing = relationship(
+        "JobListing",
+        backref=backref(
+            "application",
+            uselist=False,
+            cascade="all, delete",
+            passive_deletes=True,
+        ),
+        lazy="selectin",
+    )
     resume_variant = relationship("ResumeVariant", lazy="selectin")

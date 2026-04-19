@@ -28,9 +28,9 @@ class Settings(BaseSettings):
 
     # Direct Anthropic (when AI_PROVIDER=anthropic)
     ANTHROPIC_API_KEY: str = ""
-    ANTHROPIC_MODEL_HEAVY: str = "claude-opus-4-6"
-    ANTHROPIC_MODEL_STANDARD: str = "claude-sonnet-4-5"
-    ANTHROPIC_MODEL_LIGHT: str = "claude-haiku-4-5"
+    ANTHROPIC_MODEL_HEAVY: str = "claude-sonnet-4-6"
+    ANTHROPIC_MODEL_STANDARD: str = "claude-sonnet-4-6"
+    ANTHROPIC_MODEL_LIGHT: str = "claude-haiku-4-5-20251001"
 
     # OpenAI (when AI_PROVIDER=openai)
     OPENAI_API_KEY: str = ""

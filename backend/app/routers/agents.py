@@ -31,6 +31,7 @@ from app.schemas.workspace import (
     PipelineRunOut,
     PipelineStartRequest,
     PreflightResult,
+    SkillGapCheckResult,
     WorkspaceCreate,
     WorkspaceOut,
 )
@@ -39,7 +40,8 @@ from app.services.agents import AGENT_RUNNERS
 from app.services.agents.base import load_agent_context
 from app.services.agents.pipeline import run_pipeline
 from app.services.export_service import export_to_docx, export_to_pdf
-from app.services.workspace_service import get_artifacts, get_or_create_workspace
+from app.services.outlier_detector import detect_outliers
+from app.services.workspace_service import get_artifacts, get_or_create_workspace, save_artifact
 
 logger = logging.getLogger(__name__)
 
@@ -457,6 +459,64 @@ async def run_agent_task(
         summary="\n".join(summary_parts),
         next_suggested_agent=next_agent,
         preflight_warnings=preflight_warnings,
+    )
+
+
+# ─── Skill Gap Check endpoint ──────────────────────────────────────
+
+@router.post(
+    "/workspaces/{workspace_id}/check-skill-gaps",
+    response_model=SkillGapCheckResult,
+)
+async def check_skill_gaps(
+    workspace_id: uuid.UUID,
+    current_user: UserInfo = Depends(require_permission("workspace", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Run outlier detection against the job's requirements and persist results."""
+    import json as _json
+    from app.models.application import Application
+
+    user_id = await _get_user_id(db, current_user)
+
+    ws_result = await db.execute(
+        select(AgentWorkspace).where(
+            AgentWorkspace.id == workspace_id,
+            AgentWorkspace.user_id == user_id,
+        )
+    )
+    workspace = ws_result.scalar_one_or_none()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    app_result = await db.execute(
+        select(Application).where(Application.id == workspace.application_id)
+    )
+    application = app_result.scalar_one_or_none()
+    if not application or not application.job_listing:
+        raise HTTPException(status_code=400, detail="No job listing linked to this workspace")
+
+    reqs = application.job_listing.requirements
+    if not reqs:
+        raise HTTPException(status_code=400, detail="Job listing has no requirements to check")
+
+    raw_reqs = [{"text": r.requirement_text, "type": r.requirement_type} for r in reqs]
+    enriched = await detect_outliers(db, user_id, raw_reqs)
+
+    artifact = await save_artifact(
+        db=db,
+        workspace_id=workspace_id,
+        agent_name="scout",
+        artifact_type="skill_gap_check",
+        title=f"Skill Gap Check: {application.job_listing.title}",
+        content=_json.dumps(enriched, default=str),
+        content_format="json",
+    )
+    await db.commit()
+
+    return SkillGapCheckResult(
+        artifact_id=str(artifact.id),
+        requirements=enriched,
     )
 
 

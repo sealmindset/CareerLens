@@ -276,6 +276,12 @@ export interface AnalyticsTrends {
 }
 
 // Workspace types
+export interface InterviewPrepFlashcard {
+  q: string;
+  a: string;
+  tag?: string;
+}
+
 export interface WorkspaceArtifact {
   id: string;
   workspace_id: string;
@@ -829,4 +835,51 @@ export interface ResumeChatPublishResponse {
 
 export interface ResumeChatLatestExistsResponse {
   exists: boolean;
+}
+
+export interface InterviewQuestion {
+  id: string;
+  user_id: string;
+  company: string | null;
+  role_title: string | null;
+  question_text: string;
+  interview_stage: string | null;
+  interview_format: string | null;
+  date_asked: string | null;
+  topic_tags: string[] | null;
+  linked_story_ids: string[] | null;
+  notes: string | null;
+  model_answer: string | null;
+  outcome: string | null;
+  status: string;
+  source_job_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InterviewQuestionSummary {
+  total_count: number;
+  active_count: number;
+  archived_count: number;
+  unique_companies: number;
+  most_recent_date: string | null;
+}
+
+export interface InterviewQuestionCreate {
+  question_text: string;
+  company?: string | null;
+  role_title?: string | null;
+  interview_stage?: string | null;
+  interview_format?: string | null;
+  date_asked?: string | null;
+  topic_tags?: string[] | null;
+  linked_story_ids?: string[] | null;
+  notes?: string | null;
+  model_answer?: string | null;
+  outcome?: string | null;
+  source_job_id?: string | null;
+}
+
+export interface InterviewQuestionUpdate extends Partial<InterviewQuestionCreate> {
+  status?: string;
 }

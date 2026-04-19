@@ -224,6 +224,12 @@ AGENT_REQUIREMENTS = {
         ],
         "next_agent": None,
     },
+    "interview_prep_coach": {
+        "description": "Stage-aware pre-interview prep: brief, flashcards, STAR drafts, and a mock-interview chat -- drawn from your Interview Question Bank, Story Bank, and profile",
+        "required": ["profile_basic", "job_listing"],
+        "optional": [],
+        "next_agent": None,
+    },
 }
 
 
