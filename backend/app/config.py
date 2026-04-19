@@ -44,6 +44,17 @@ class Settings(BaseSettings):
     OLLAMA_MODEL_STANDARD: str = "llama3.1:8b"
     OLLAMA_MODEL_LIGHT: str = "llama3.1:8b"
 
+    # MLX Local Inference (Apple Silicon -- macOS host only)
+    MLX_ENABLED: bool = False
+    MLX_BASE_URL: str = "http://host.docker.internal:8080"
+    MLX_EMBEDDING_URL: str = "http://host.docker.internal:8081"
+    MLX_MODEL_STANDARD: str = "mlx-community/Qwen2.5-72B-Instruct-4bit"
+    MLX_MODEL_LIGHT: str = "mlx-community/Qwen2.5-7B-Instruct-4bit"
+    MLX_EMBEDDING_MODEL: str = "nomic-ai/nomic-embed-text-v1.5"
+    MLX_EMBEDDING_DIMENSIONS: int = 768
+    MLX_TIMEOUT: int = 600
+    MLX_HEALTH_CHECK_INTERVAL: int = 30
+
     # RAG / Embedding Configuration
     EMBEDDING_PROVIDER: str = "keyword"
     EMBEDDING_MODEL: str = "text-embedding-3-small"

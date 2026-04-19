@@ -6,6 +6,7 @@ from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.config import settings
 from app.models.base import Base
 
 try:
@@ -33,7 +34,7 @@ class ProfileChunk(Base):
         String(255), nullable=True
     )  # ID of the source record (experience id, skill id, etc.)
     embedding = mapped_column(
-        Vector(1536) if Vector else sa.LargeBinary, nullable=True
+        Vector(settings.EMBEDDING_DIMENSIONS) if Vector else sa.LargeBinary, nullable=True
     )
     keyword_tokens: Mapped[str | None] = mapped_column(
         Text, nullable=True

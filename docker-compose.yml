@@ -88,9 +88,18 @@ services:
       - RAG_CHUNK_OVERLAP=${RAG_CHUNK_OVERLAP:-50}
       - RAG_TOP_K=${RAG_TOP_K:-10}
       - MOCK_OLIVIA_URL=${MOCK_OLIVIA_URL:-http://mock-olivia:10091}
+      - MLX_ENABLED=${MLX_ENABLED:-false}
+      - MLX_BASE_URL=${MLX_BASE_URL:-http://host.docker.internal:8080}
+      - MLX_EMBEDDING_URL=${MLX_EMBEDDING_URL:-http://host.docker.internal:8081}
+      - MLX_MODEL_STANDARD=${MLX_MODEL_STANDARD:-mlx-community/Qwen2.5-72B-Instruct-4bit}
+      - MLX_MODEL_LIGHT=${MLX_MODEL_LIGHT:-mlx-community/Qwen2.5-7B-Instruct-4bit}
+      - MLX_EMBEDDING_MODEL=${MLX_EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1.5}
+      - MLX_EMBEDDING_DIMENSIONS=${MLX_EMBEDDING_DIMENSIONS:-768}
+      - MLX_TIMEOUT=${MLX_TIMEOUT:-600}
     volumes:
       - ${HOME}/.azure:/root/.azure:ro
     extra_hosts:
+      - "host.docker.internal:host-gateway"
       - "snapistg-scus.azure.sleepnumber.com:10.193.189.4"
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]

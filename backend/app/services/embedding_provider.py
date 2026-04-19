@@ -122,6 +122,43 @@ def keyword_score(query_tokens: list[str], doc_tokens_json: str) -> float:
     return score
 
 
+class MLXEmbeddingProvider(EmbeddingProvider):
+    """Local embedding provider using MLX-served model (OpenAI-compatible API)."""
+
+    def __init__(self) -> None:
+        self._base_url = settings.MLX_EMBEDDING_URL.rstrip("/")
+        self._model = settings.MLX_EMBEDDING_MODEL
+        self._dimensions = settings.MLX_EMBEDDING_DIMENSIONS
+
+    @property
+    def dimensions(self) -> int:
+        return self._dimensions
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        import httpx
+
+        url = f"{self._base_url}/v1/embeddings"
+        all_embeddings: list[list[float]] = []
+        batch_size = 32
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.post(url, json={
+                    "input": batch,
+                    "model": self._model,
+                })
+                resp.raise_for_status()
+                data = resp.json()
+                all_embeddings.extend([d["embedding"] for d in data["data"]])
+        return all_embeddings
+
+    async def embed_query(self, query: str) -> list[float]:
+        result = await self.embed([query])
+        return result[0]
+
+
 class KeywordEmbeddingProvider(EmbeddingProvider):
     """Keyword-based fallback that uses token matching instead of vectors.
 
@@ -152,6 +189,13 @@ def get_embedding_provider() -> EmbeddingProvider:
             )
             return KeywordEmbeddingProvider()
         return OpenAIEmbeddingProvider()
+
+    if provider_name == "mlx":
+        try:
+            return MLXEmbeddingProvider()
+        except Exception as exc:
+            logger.warning("MLX embedding init failed, falling back to keyword: %s", exc)
+            return KeywordEmbeddingProvider()
 
     # Default: keyword-based fallback
     return KeywordEmbeddingProvider()
