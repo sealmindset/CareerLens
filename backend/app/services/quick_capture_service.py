@@ -37,10 +37,20 @@ FALLBACK_PROMPT = (
     "For each actionable item, extract:\n"
     "- title, priority (urgent/important/normal/low), due_date (YYYY-MM-DD), "
     "due_reason, application_hint (company name or null)\n\n"
+    "## Structured Fields (for full_jd or event only)\n"
+    "When classification is **full_jd** or **event**, also extract these fields "
+    "into a top-level \"structured\" object:\n"
+    "- contact_name, contact_email, role_title, company, location, job_type, "
+    "event_type, scheduled_time (ISO 8601), timezone, platform, duration_estimate, "
+    "contract_details, source, salary_range, additional_notes\n"
+    "- For full_jd: also include \"description\" (the cleaned JD text, excluding "
+    "requirements) and \"requirements\" (array of {\"text\": \"...\", \"type\": "
+    "\"required\"|\"preferred\"|\"nice_to_have\"})\n"
+    "- Set input_mode to 'full_jd' or 'quick_note' as appropriate\n"
+    "- Use null for fields not found\n\n"
     "Return JSON only:\n"
     '{"classification": "full_jd"|"event"|"tasks"|"info", "summary": "...", '
-    '"tasks": [{"title": "...", "priority": "...", "due_date": "...", '
-    '"due_reason": "...", "application_hint": null}]}'
+    '"tasks": [...], "structured": {...} | null}'
 )
 
 
@@ -103,9 +113,11 @@ async def process_capture(
         classification = parsed.get("classification", "info")
         summary = parsed.get("summary")
         extracted_tasks_raw = parsed.get("tasks", [])
+        structured_fields = parsed.get("structured")
     except Exception as exc:
         logger.warning("AI capture processing failed (%s), marking as info", exc)
         summary = capture.raw_text[:200]
+        structured_fields = None
 
     # 2. Create Task records from extracted tasks
     tasks_created: list[Task] = []
@@ -148,7 +160,10 @@ async def process_capture(
 
     if should_create_event:
         try:
-            event_created = await create_from_note(db, user_id, capture.raw_text)
+            event_created = await create_from_note(
+                db, user_id, capture.raw_text,
+                overrides=structured_fields if isinstance(structured_fields, dict) else None,
+            )
         except Exception as exc:
             logger.warning("Event creation from capture failed: %s", exc)
 

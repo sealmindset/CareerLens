@@ -59,12 +59,15 @@ async def create_from_note(
 
     Returns the created Event with relationships loaded.
     """
-    # 1. Parse note (or merge with overrides)
-    parsed = await parse_note(db, raw_note)
-    if overrides:
-        for key, value in overrides.items():
-            if value is not None:
-                parsed[key] = value
+    # 1. Parse note — skip AI call if overrides already contain key fields
+    if overrides and overrides.get("company") and overrides.get("role_title"):
+        parsed = dict(overrides)
+    else:
+        parsed = await parse_note(db, raw_note)
+        if overrides:
+            for key, value in overrides.items():
+                if value is not None:
+                    parsed[key] = value
 
     company = parsed.get("company") or "Unknown Company"
     role_title = parsed.get("role_title") or "Untitled Role"

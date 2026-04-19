@@ -17,17 +17,21 @@ from app.models.user import User
 from app.schemas.auth import UserInfo
 from app.models.application import Application
 from app.schemas.resume_variant import (
-    ResumeVariantCreate,
-    ResumeVariantUpdate,
-    ResumeVariantOut,
-    ResumeVariantDetailOut,
-    ResumeVariantVersionOut,
+    CertificationItem,
+    EducationItem,
+    ExperienceItem,
     ResumeUploadExtraction,
     ResumeUploadReviewRequest,
-    VariantMatchResult,
+    ResumeVariantCreate,
+    ResumeVariantDetailOut,
+    ResumeVariantOut,
+    ResumeVariantUpdate,
+    ResumeVariantVersionOut,
+    SkillItem,
     VariantDiffResult,
-    VariantStatsResponse,
+    VariantMatchResult,
     VariantStatsItem,
+    VariantStatsResponse,
     VariantStatusBreakdown,
 )
 
@@ -533,7 +537,8 @@ async def upload_resume_to_variant(
             ResumeVariant.user_id == user_id,
         )
     )
-    if not result.scalar_one_or_none():
+    variant = result.scalar_one_or_none()
+    if not variant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variant not found")
 
     if not file.filename:
@@ -550,6 +555,19 @@ async def upload_resume_to_variant(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Could not extract text from the file.",
+        )
+
+    # Skip AI if this variant already has the same text parsed
+    if variant.raw_resume_text == raw_text and variant.experiences:
+        return ResumeUploadExtraction(
+            headline=variant.headline,
+            summary=variant.summary,
+            skills=[SkillItem(**s) for s in (variant.skills or [])],
+            experiences=[ExperienceItem(**e) for e in (variant.experiences or [])],
+            educations=[EducationItem(**e) for e in (variant.educations or [])],
+            certifications=[CertificationItem(**c) for c in (variant.certifications or [])],
+            additional_sections=variant.additional_sections,
+            raw_resume_text=raw_text,
         )
 
     # AI extraction with adaptable mapping

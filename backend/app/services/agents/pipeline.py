@@ -6,7 +6,6 @@ Two pipeline types:
 - "quick": Scout → Tailor → Talking Points → Strategist (essentials only)
 """
 
-import json
 import logging
 import uuid
 
@@ -14,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.workspace import PipelineRun, WorkspaceArtifact
 from app.services.agents import AGENT_RUNNERS
-from app.services.agents.base import AgentContext, load_agent_context
+from app.services.agents.base import AgentContext, build_shared_prompt_parts, load_agent_context
 from app.services.workspace_service import (
     create_pipeline_run,
     get_artifacts,
@@ -58,6 +57,18 @@ async def run_pipeline(
 
     all_artifacts: list[WorkspaceArtifact] = []
 
+    # Load context once — profile, job, and application don't change during a pipeline run
+    context = await load_agent_context(
+        db=db,
+        user_id=user_id,
+        workspace_id=workspace_id,
+        application_id=application_id,
+        additional_instructions=additional_instructions,
+    )
+
+    # Pre-compute expensive prompt parts (profile RAG, job, story bank) once for all agents
+    context.cached_prompt_parts = await build_shared_prompt_parts(context)
+
     for agent_name in sequence:
         runner = AGENT_RUNNERS.get(agent_name)
         if not runner:
@@ -68,14 +79,8 @@ async def run_pipeline(
             await update_pipeline_run(db, run.id, current_agent=agent_name)
             await db.commit()
 
-            # Reload context each iteration to include new artifacts
-            context = await load_agent_context(
-                db=db,
-                user_id=user_id,
-                workspace_id=workspace_id,
-                application_id=application_id,
-                additional_instructions=additional_instructions,
-            )
+            # Only refresh workspace artifacts (new outputs from prior agents)
+            context.workspace_artifacts = await get_artifacts(db, workspace_id)
 
             logger.info("Pipeline '%s': running agent '%s'", pipeline_type, agent_name)
             artifacts = await runner(context)

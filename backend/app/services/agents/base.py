@@ -23,6 +23,24 @@ from app.services.workspace_service import build_workspace_context, get_artifact
 
 logger = logging.getLogger(__name__)
 
+CONTEXT_NEEDS: dict[str, str] = {
+    "tailor": "full",
+    "coach": "full",
+    "achievement_amplifier": "full",
+    "ageism_shield": "full",
+    "overqualification_shield": "full",
+    "talking_points": "full",
+    "scout": "summary",
+    "ats_predictor": "summary",
+    "hiring_manager_sim": "summary",
+    "strategist": "summary",
+    "brand_advisor": "summary",
+    "ninety_day_plan": "summary",
+    "coordinator": "minimal",
+    "outreach_drafter": "minimal",
+    "interview_verdict": "minimal",
+}
+
 
 @dataclass
 class AgentContext:
@@ -38,6 +56,7 @@ class AgentContext:
     ageism_shield: bool = False
     overqualification_shield: bool = False
     identity_shield: bool = True  # ON by default
+    cached_prompt_parts: dict[str, str] | None = None
 
 
 async def load_agent_context(
@@ -126,6 +145,54 @@ def format_profile_context(profile: Profile | None) -> str:
         if len(profile.raw_resume_text) > 2000:
             resume_preview += "\n[... resume continues ...]"
         parts.append(f"\n**Raw Resume Text:**\n{resume_preview}")
+
+    return "\n".join(parts)
+
+
+def format_profile_summary(profile: Profile | None) -> str:
+    """Compact profile: headline, summary, and skills only (~500 tokens)."""
+    if not profile:
+        return "No profile data available."
+
+    parts = ["## Candidate Profile (Summary)\n"]
+
+    if profile.headline:
+        parts.append(f"**Headline:** {profile.headline}")
+    if profile.summary:
+        parts.append(f"**Summary:** {profile.summary}")
+
+    if profile.skills:
+        skills_text = ", ".join(
+            f"{s.skill_name} ({s.proficiency_level})"
+            for s in profile.skills
+        )
+        parts.append(f"**Skills:** {skills_text}")
+
+    if profile.experiences:
+        parts.append("\n**Experience (titles only):**")
+        for exp in profile.experiences:
+            dates = ""
+            if exp.start_date:
+                dates = f" ({exp.start_date}"
+                dates += f" - {exp.end_date})" if exp.end_date else " - present)"
+            parts.append(f"- {exp.title} at {exp.company}{dates}")
+
+    return "\n".join(parts)
+
+
+def format_profile_minimal(profile: Profile | None) -> str:
+    """Minimal profile: headline + title list only (~150 tokens)."""
+    if not profile:
+        return "No profile data available."
+
+    parts = ["## Candidate Profile (Brief)\n"]
+
+    if profile.headline:
+        parts.append(f"**Headline:** {profile.headline}")
+
+    if profile.experiences:
+        titles = [f"{exp.title} at {exp.company}" for exp in profile.experiences[:5]]
+        parts.append(f"**Roles:** {'; '.join(titles)}")
 
     return "\n".join(parts)
 
@@ -257,6 +324,35 @@ async def format_story_bank_context(
     return "\n".join(parts)
 
 
+async def build_shared_prompt_parts(context: AgentContext) -> dict[str, str]:
+    """Pre-compute the expensive prompt parts that are identical across agents.
+
+    Call once before a pipeline loop, then set context.cached_prompt_parts.
+    Caches three profile variants (full/summary/minimal) so each agent gets
+    only the context depth it needs.
+    """
+    rag_query = f"{context.job.title} at {context.job.company}"
+    if context.job.description:
+        rag_query += " " + context.job.description[:500]
+
+    profile_full = await format_profile_context_with_rag(
+        context.db, context.profile, rag_query
+    )
+    profile_summary = format_profile_summary(context.profile)
+    profile_minimal = format_profile_minimal(context.profile)
+    job_ctx = format_job_context(context.job)
+    story_ctx = await format_story_bank_context(
+        context.db, context.user_id, context.job
+    )
+    return {
+        "profile_full": profile_full,
+        "profile_summary": profile_summary,
+        "profile_minimal": profile_minimal,
+        "job_ctx": job_ctx,
+        "story_ctx": story_ctx,
+    }
+
+
 async def call_agent_ai(
     db: AsyncSession,
     agent_name: str,
@@ -275,25 +371,37 @@ async def call_agent_ai(
     # Build the full user prompt with all context
     parts = []
 
-    # Build a RAG query from job title + description for relevance
-    rag_query = f"{context.job.title} at {context.job.company}"
-    if context.job.description:
-        rag_query += " " + context.job.description[:500]
+    context_level = CONTEXT_NEEDS.get(agent_name, "full")
 
-    # Add profile context (RAG-enhanced when available)
-    profile_ctx = await format_profile_context_with_rag(
-        context.db, context.profile, rag_query
-    )
+    if context.cached_prompt_parts:
+        if context_level == "minimal":
+            profile_ctx = context.cached_prompt_parts["profile_minimal"]
+        elif context_level == "summary":
+            profile_ctx = context.cached_prompt_parts["profile_summary"]
+        else:
+            profile_ctx = context.cached_prompt_parts["profile_full"]
+        job_ctx = context.cached_prompt_parts["job_ctx"]
+        story_ctx = context.cached_prompt_parts["story_ctx"]
+    else:
+        if context_level == "minimal":
+            profile_ctx = format_profile_minimal(context.profile)
+        elif context_level == "summary":
+            profile_ctx = format_profile_summary(context.profile)
+        else:
+            rag_query = f"{context.job.title} at {context.job.company}"
+            if context.job.description:
+                rag_query += " " + context.job.description[:500]
+            profile_ctx = await format_profile_context_with_rag(
+                context.db, context.profile, rag_query
+            )
+        job_ctx = format_job_context(context.job)
+        story_ctx = await format_story_bank_context(
+            context.db, context.user_id, context.job
+        )
+
     parts.append(profile_ctx)
-
-    # Add job context
-    parts.append(format_job_context(context.job))
-
-    # Add Story Bank context (verified experience matched to this job)
-    story_ctx = await format_story_bank_context(
-        context.db, context.user_id, context.job
-    )
-    if story_ctx:
+    parts.append(job_ctx)
+    if story_ctx and context_level != "minimal":
         parts.append(story_ctx)
 
     # Add workspace context from other agents
