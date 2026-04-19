@@ -30,6 +30,7 @@
 - [x] Add export functionality for applications data
 - [ ] Add multi-language support
 - [x] Implement AI fallback model configuration
+- [x] Add Apple MLX smart routing for local AI inference on Apple Silicon
 - [ ] Add Terraform infrastructure for Azure deployment
 - [x] Security scanner integration
 
