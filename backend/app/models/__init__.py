@@ -15,6 +15,7 @@ from app.models.event import Event
 from app.models.task import Task
 from app.models.quick_capture import QuickCapture
 from app.models.interview_question import InterviewQuestion
+from app.models.interview_journal import InterviewJournalEntry
 
 __all__ = [
     "Base", "User", "Role", "Permission", "RolePermission",
@@ -29,4 +30,5 @@ __all__ = [
     "Event",
     "Task", "QuickCapture",
     "InterviewQuestion",
+    "InterviewJournalEntry",
 ]

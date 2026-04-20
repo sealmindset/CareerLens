@@ -11,6 +11,8 @@ import { DataTable } from "@/components/data-table";
 import { DataTableColumnHeader } from "@/components/data-table-column-header";
 import { MarkdownContent } from "@/components/markdown-content";
 import { ResumeChatDrawer } from "@/components/resume-chat-drawer";
+import { PipelineStageIndicator } from "@/components/pipeline-stage-indicator";
+import { InterviewJournal } from "@/components/interview-journal";
 import type { ResumeChatAgent } from "@/lib/types";
 import type {
   AgentConversation,
@@ -1304,6 +1306,46 @@ export default function AgentsPage() {
         },
       },
       {
+        accessorKey: "priority",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Priority" />
+        ),
+        cell: ({ row }) => {
+          const job = row.original;
+          const val = job.priority;
+          return (
+            <div onClick={(e) => e.stopPropagation()}>
+              <input
+                type="number"
+                min={1}
+                value={val ?? ""}
+                placeholder="—"
+                className="w-12 rounded border bg-transparent px-1.5 py-0.5 text-center text-xs tabular-nums focus:ring-1 focus:ring-primary"
+                onBlur={async (e) => {
+                  const newVal = e.target.value ? parseInt(e.target.value, 10) : null;
+                  if (newVal === val) return;
+                  try {
+                    await apiPut(`/jobs/${job.id}/priority`, { priority: newVal });
+                    setJobListings((prev) =>
+                      prev.map((j) => (j.id === job.id ? { ...j, priority: newVal } : j)),
+                    );
+                  } catch { /* ignore */ }
+                }}
+                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              />
+            </div>
+          );
+        },
+        sortingFn: (rowA, rowB) => {
+          const a = rowA.original.priority;
+          const b = rowB.original.priority;
+          if (a == null && b == null) return 0;
+          if (a == null) return 1;
+          if (b == null) return -1;
+          return a - b;
+        },
+      },
+      {
         accessorKey: "match_score",
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Match Score" />
@@ -1368,6 +1410,49 @@ export default function AgentsPage() {
           ) : (
             <span style={{ color: "var(--muted-foreground)" }}>--</span>
           );
+        },
+      },
+      {
+        id: "pipeline_stage",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Stage" />
+        ),
+        cell: ({ row }) => {
+          const existingApp = applications.find(
+            (a) => a.job_listing_id === row.original.id,
+          );
+          if (!existingApp) return <span style={{ color: "var(--muted-foreground)" }}>--</span>;
+          const stage = existingApp.pipeline_stage || "tbat";
+          const stageColors: Record<string, { bg: string; text: string }> = {
+            tbat: { bg: "rgba(156,163,175,0.15)", text: "rgb(107,114,128)" },
+            applied: { bg: "rgba(59,130,246,0.1)", text: "rgb(37,99,235)" },
+            recruiter_interview: { bg: "rgba(168,85,247,0.1)", text: "rgb(147,51,234)" },
+            hr_interview: { bg: "rgba(168,85,247,0.1)", text: "rgb(147,51,234)" },
+            technical_interview: { bg: "rgba(249,115,22,0.1)", text: "rgb(234,88,12)" },
+            hiring_manager_interview: { bg: "rgba(249,115,22,0.1)", text: "rgb(234,88,12)" },
+            panel_interview: { bg: "rgba(239,68,68,0.1)", text: "rgb(220,38,38)" },
+            offer: { bg: "rgba(16,185,129,0.1)", text: "rgb(5,150,105)" },
+            negotiation: { bg: "rgba(16,185,129,0.1)", text: "rgb(5,150,105)" },
+            accepted: { bg: "rgba(16,185,129,0.2)", text: "rgb(4,120,87)" },
+            rejected: { bg: "rgba(239,68,68,0.1)", text: "rgb(185,28,28)" },
+            withdrawn: { bg: "rgba(234,179,8,0.1)", text: "rgb(161,98,7)" },
+          };
+          const colors = stageColors[stage] || stageColors.tbat;
+          return (
+            <span
+              className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap"
+              style={{ backgroundColor: colors.bg, color: colors.text }}
+            >
+              {stage.replace(/_/g, " ")}
+            </span>
+          );
+        },
+        filterFn: (row, _columnId, filterValue: string[]) => {
+          const existingApp = applications.find(
+            (a) => a.job_listing_id === row.original.id,
+          );
+          const stage = existingApp?.pipeline_stage || "tbat";
+          return filterValue.includes(stage);
         },
       },
       {
@@ -1918,6 +2003,24 @@ export default function AgentsPage() {
                       { label: "Archived", value: "archived" },
                     ],
                   },
+                  {
+                    id: "pipeline_stage",
+                    title: "Stage",
+                    options: [
+                      { label: "TBAT", value: "tbat" },
+                      { label: "Applied", value: "applied" },
+                      { label: "Recruiter", value: "recruiter_interview" },
+                      { label: "HR", value: "hr_interview" },
+                      { label: "Technical", value: "technical_interview" },
+                      { label: "Hiring Mgr", value: "hiring_manager_interview" },
+                      { label: "Panel", value: "panel_interview" },
+                      { label: "Offer", value: "offer" },
+                      { label: "Negotiation", value: "negotiation" },
+                      { label: "Accepted", value: "accepted" },
+                      { label: "Rejected", value: "rejected" },
+                      { label: "Withdrawn", value: "withdrawn" },
+                    ],
+                  },
                 ]}
                 storageKey="studio-job-picker"
                 onRowClick={(job) => loadWorkspace(job)}
@@ -1961,18 +2064,27 @@ export default function AgentsPage() {
                     {selectedJob.match_score !== null && (
                       <span className="ml-2">Match: {selectedJob.match_score}%</span>
                     )}
-                    {currentApp && (
-                      <span
-                        className="inline-flex ml-2 rounded-full px-2 py-0.5 text-xs font-medium"
-                        style={{
-                          backgroundColor: "rgba(59,130,246,0.1)",
-                          color: "rgb(59,130,246)",
-                        }}
-                      >
-                        {currentApp.status}
-                      </span>
-                    )}
                   </p>
+                  {currentApp && (
+                    <div className="mt-1.5">
+                      <PipelineStageIndicator
+                        currentStage={currentApp.pipeline_stage || "tbat"}
+                        onStageChange={async (stage) => {
+                          try {
+                            await apiPut(`/applications/${currentApp.id}/pipeline-stage`, { pipeline_stage: stage });
+                            setApplications((prev) =>
+                              prev.map((a) =>
+                                a.id === currentApp.id
+                                  ? { ...a, pipeline_stage: stage, pipeline_stage_updated_at: new Date().toISOString() }
+                                  : a,
+                              ),
+                            );
+                          } catch { /* ignore */ }
+                        }}
+                        compact
+                      />
+                    </div>
+                  )}
                   {selectedJob.url && (
                     <a
                       href={selectedJob.url}
@@ -2521,6 +2633,14 @@ export default function AgentsPage() {
                 })}
               </div>
             </div>
+
+            {/* ─── Interview Journal ─── */}
+            {currentApp && (
+              <InterviewJournal
+                applicationId={currentApp.id}
+                currentStage={currentApp.pipeline_stage || "tbat"}
+              />
+            )}
 
             {/* ─── Interview Likelihood Indicator ─── */}
             <div

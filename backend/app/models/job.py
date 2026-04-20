@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 import sqlalchemy as sa
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -61,6 +61,7 @@ class JobListing(Base):
     application_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
     application_platform: Mapped[str | None] = mapped_column(String(100), nullable=True)
     application_method_details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

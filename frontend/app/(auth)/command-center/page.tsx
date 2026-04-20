@@ -28,7 +28,10 @@ import {
 } from "lucide-react";
 import { apiGet, apiPost, apiDelete } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import { TaskList } from "@/components/task-list";
+import { InterviewCalendar } from "@/components/interview-calendar";
+import { ReminderSettings, DEFAULT_REMINDERS, type ReminderRule } from "@/components/reminder-settings";
 import type { Event, EnrichedRequirement, NoteParseResult, Task, QuickCapture, QuickCaptureProcessResult } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -147,6 +150,12 @@ export default function CommandCenterPage() {
   const [taskPriority, setTaskPriority] = useState("normal");
   const [taskDueDate, setTaskDueDate] = useState("");
   const [taskCreating, setTaskCreating] = useState(false);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"mission_control" | "calendar">("mission_control");
+
+  // Reminder settings for manual event creation
+  const [manualReminders, setManualReminders] = useState<ReminderRule[]>(DEFAULT_REMINDERS);
 
   /* ---- Data loading ---- */
 
@@ -360,12 +369,16 @@ export default function CommandCenterPage() {
         scheduled_at: manualDate || null,
         platform: manualPlatform || null,
         contact_name: manualContact || null,
+        reminder_settings: manualReminders.length > 0
+          ? { reminders: manualReminders.map((r) => ({ ...r, sent: false })) }
+          : null,
       });
       setManualTitle("");
       setManualType("initial_call");
       setManualDate("");
       setManualPlatform("");
       setManualContact("");
+      setManualReminders(DEFAULT_REMINDERS);
       setShowManual(false);
       await loadEvents();
     } catch {
@@ -473,6 +486,44 @@ export default function CommandCenterPage() {
           )}
         </div>
       </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 border-b">
+        <button
+          type="button"
+          onClick={() => setActiveTab("mission_control")}
+          className={cn(
+            "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+            activeTab === "mission_control"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+          )}
+        >
+          Mission Control
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("calendar")}
+          className={cn(
+            "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+            activeTab === "calendar"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground hover:border-border",
+          )}
+        >
+          Interview Calendar
+        </button>
+      </div>
+
+      {/* Calendar tab */}
+      {activeTab === "calendar" && (
+        <div className="rounded-xl border p-6" style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}>
+          <InterviewCalendar events={events} onRefresh={loadEvents} />
+        </div>
+      )}
+
+      {/* Mission Control tab */}
+      {activeTab === "mission_control" && <>
 
       {/* Success message */}
       {successMessage && (
@@ -1028,6 +1079,9 @@ export default function CommandCenterPage() {
               <label className="text-xs font-medium text-muted-foreground">Contact Name</label>
               <input type="text" value={manualContact} onChange={(e) => setManualContact(e.target.value)} placeholder="John Smith" className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
             </div>
+            <div className="sm:col-span-2">
+              <ReminderSettings value={manualReminders} onChange={setManualReminders} />
+            </div>
           </div>
           <div className="mt-3 flex items-center gap-2">
             <button onClick={handleManualCreate} disabled={manualCreating || !manualTitle.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
@@ -1173,6 +1227,8 @@ export default function CommandCenterPage() {
           )}
         </div>
       </div>
+
+      </>}
     </div>
   );
 }

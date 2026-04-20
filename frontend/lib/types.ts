@@ -144,6 +144,7 @@ export interface JobListing {
   application_method: string | null;
   application_platform: string | null;
   application_method_details: string | null;
+  priority: number | null;
   requirements: JobRequirement[];
   created_at: string;
   updated_at: string;
@@ -163,6 +164,8 @@ export interface Application {
   user_id: string;
   job_listing_id: string;
   status: string;
+  pipeline_stage: string;
+  pipeline_stage_updated_at: string | null;
   tailored_resume: string | null;
   cover_letter: string | null;
   submission_mode: string;
@@ -622,6 +625,7 @@ export interface Event {
   parsed_data: Record<string, unknown> | null;
   notes: string | null;
   reminder_sent: boolean;
+  reminder_settings: { reminders: { offset_minutes: number; channel: string; sent?: boolean }[] } | null;
   created_at: string;
   updated_at: string;
   job_title?: string | null;
@@ -882,4 +886,30 @@ export interface InterviewQuestionCreate {
 
 export interface InterviewQuestionUpdate extends Partial<InterviewQuestionCreate> {
   status?: string;
+}
+
+export interface FileImportResult {
+  questions: InterviewQuestion[];
+  imported_count: number;
+  errors: string[] | null;
+}
+
+export interface TranscribeResult {
+  transcript: string;
+  parsed_questions: InterviewQuestionCreate[];
+}
+
+export interface InterviewJournalEntry {
+  id: string;
+  application_id: string;
+  user_id: string;
+  event_id: string | null;
+  pipeline_stage: string | null;
+  entry_type: string;
+  title: string | null;
+  content: string | null;
+  outcome: string | null;
+  entry_date: string;
+  created_at: string;
+  updated_at: string;
 }

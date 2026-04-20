@@ -386,6 +386,31 @@ async def delete_job(
     await db.commit()
 
 
+class PriorityUpdate(BaseModel):
+    priority: int | None = None
+
+
+@router.put("/{job_id}/priority", response_model=JobListingOut)
+async def update_priority(
+    job_id: uuid.UUID,
+    data: PriorityUpdate,
+    current_user: UserInfo = Depends(require_permission("jobs", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    user_id = await _get_user_id(db, current_user)
+    result = await db.execute(
+        select(JobListing).where(JobListing.id == job_id, JobListing.user_id == user_id)
+    )
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job listing not found")
+
+    job.priority = data.priority
+    await db.commit()
+    await db.refresh(job)
+    return job
+
+
 @router.post("/{job_id}/detect-method", response_model=JobListingOut)
 async def detect_job_method(
     job_id: uuid.UUID,

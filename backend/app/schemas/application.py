@@ -15,6 +15,7 @@ class ApplicationCreate(BaseModel):
 class ApplicationUpdate(BaseModel):
     notes: str | None = None
     status: str | None = None
+    pipeline_stage: str | None = None
     follow_up_date: date | None = None
     tailored_resume: str | None = None
     cover_letter: str | None = None
@@ -27,6 +28,10 @@ class ApplicationStatusUpdate(BaseModel):
     status: str
 
 
+class PipelineStageUpdate(BaseModel):
+    pipeline_stage: str
+
+
 class ApplicationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,6 +39,8 @@ class ApplicationOut(BaseModel):
     user_id: uuid.UUID
     job_listing_id: uuid.UUID
     status: str
+    pipeline_stage: str = "tbat"
+    pipeline_stage_updated_at: datetime | None = None
     tailored_resume: str | None = None
     cover_letter: str | None = None
     submission_mode: str

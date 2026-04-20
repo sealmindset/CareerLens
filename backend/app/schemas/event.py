@@ -18,6 +18,7 @@ class EventCreate(BaseModel):
     platform: str | None = None
     location: str | None = None
     notes: str | None = None
+    reminder_settings: dict | None = None
 
 
 class EventUpdate(BaseModel):
@@ -35,6 +36,7 @@ class EventUpdate(BaseModel):
     location: str | None = None
     prep_status: str | None = None
     notes: str | None = None
+    reminder_settings: dict | None = None
 
 
 class EventOut(BaseModel):
@@ -59,6 +61,7 @@ class EventOut(BaseModel):
     parsed_data: dict | None = None
     notes: str | None = None
     reminder_sent: bool
+    reminder_settings: dict | None = None
     created_at: datetime
     updated_at: datetime
     # Enriched from linked application

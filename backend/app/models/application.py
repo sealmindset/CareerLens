@@ -8,6 +8,12 @@ from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
 
 from app.models.base import Base
 
+PIPELINE_STAGES = [
+    "tbat", "applied", "recruiter_interview", "hr_interview",
+    "technical_interview", "hiring_manager_interview", "panel_interview",
+    "offer", "negotiation", "accepted", "rejected", "withdrawn",
+]
+
 application_status_enum = sa.Enum(
     "draft", "tailoring", "ready_to_review", "submitted",
     "interviewing", "offer", "rejected", "withdrawn",
@@ -50,6 +56,12 @@ class Application(Base):
     )
     resume_type: Mapped[str | None] = mapped_column(
         String(20), nullable=True, default="original"
+    )
+    pipeline_stage: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="tbat"
+    )
+    pipeline_stage_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     follow_up_date: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

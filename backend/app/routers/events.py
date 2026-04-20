@@ -128,6 +128,30 @@ async def upcoming_events(
     return [_enrich_event(e) for e in events]
 
 
+@router.get("/calendar", response_model=list[EventOut])
+async def calendar_events(
+    start_date: str | None = Query(None, description="ISO date string"),
+    end_date: str | None = Query(None, description="ISO date string"),
+    current_user: UserInfo = Depends(require_permission("events", "view")),
+    db: AsyncSession = Depends(get_db),
+):
+    user_id = await _get_user_id(db, current_user)
+    query = select(Event).where(
+        Event.user_id == user_id,
+        Event.scheduled_at.isnot(None),
+    )
+
+    if start_date:
+        query = query.where(Event.scheduled_at >= start_date)
+    if end_date:
+        query = query.where(Event.scheduled_at <= end_date)
+
+    query = query.order_by(Event.scheduled_at.asc())
+    result = await db.execute(query)
+    events = result.scalars().all()
+    return [_enrich_event(e) for e in events]
+
+
 @router.get("/{event_id}", response_model=EventOut)
 async def get_event(
     event_id: uuid.UUID,

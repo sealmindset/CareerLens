@@ -44,6 +44,7 @@ class JobListingCreate(BaseModel):
     job_type: str | None = None
     source: str = "manual"
     notes: str | None = None
+    priority: int | None = None
 
 
 class JobListingUpdate(BaseModel):
@@ -59,6 +60,7 @@ class JobListingUpdate(BaseModel):
     application_method: str | None = None
     application_platform: str | None = None
     application_method_details: str | None = None
+    priority: int | None = None
 
 
 class JobListingOut(BaseModel):
@@ -81,6 +83,7 @@ class JobListingOut(BaseModel):
     application_method: str | None = None
     application_platform: str | None = None
     application_method_details: str | None = None
+    priority: int | None = None
     created_at: datetime
     updated_at: datetime
     requirements: list[JobRequirementOut] = []

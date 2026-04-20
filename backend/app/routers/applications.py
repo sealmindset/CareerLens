@@ -14,11 +14,13 @@ from app.middleware.permissions import require_permission
 from app.models.application import Application
 from app.models.job import JobListing
 from app.models.user import User
+from app.models.application import PIPELINE_STAGES
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationOut,
     ApplicationStatusUpdate,
     ApplicationUpdate,
+    PipelineStageUpdate,
 )
 from app.schemas.auth import UserInfo
 
@@ -222,6 +224,48 @@ async def update_application_status(
     await db.commit()
     await db.refresh(application)
     return application
+
+
+@router.put("/{app_id}/pipeline-stage", response_model=ApplicationOut)
+async def update_pipeline_stage(
+    app_id: uuid.UUID,
+    data: PipelineStageUpdate,
+    current_user: UserInfo = Depends(require_permission("applications", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    if data.pipeline_stage not in PIPELINE_STAGES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid pipeline stage. Must be one of: {', '.join(PIPELINE_STAGES)}",
+        )
+    user_id = await _get_user_id(db, current_user)
+    result = await db.execute(
+        select(Application).where(Application.id == app_id, Application.user_id == user_id)
+    )
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    application.pipeline_stage = data.pipeline_stage
+    application.pipeline_stage_updated_at = datetime.now(timezone.utc)
+
+    from app.services.notification_service import create_notification
+
+    await create_notification(
+        db,
+        title=f"Stage updated: {data.pipeline_stage.replace('_', ' ').title()}",
+        notification_type="STATUS_CHANGE",
+        recipient_type="INTERNAL",
+        recipient_id=user_id,
+        message=f"Pipeline stage changed to {data.pipeline_stage.replace('_', ' ').title()}",
+        related_entity_type="application",
+        related_entity_id=app_id,
+        sent_by="JARVIS",
+    )
+
+    await db.commit()
+    await db.refresh(application)
+    return _enrich_application(application)
 
 
 @router.delete("/{app_id}", status_code=status.HTTP_204_NO_CONTENT)

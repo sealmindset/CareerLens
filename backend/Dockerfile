@@ -9,6 +9,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Skip TLS verification for corporate proxy environments
 RUN NODE_TLS_REJECT_UNAUTHORIZED=0 playwright install --with-deps chromium
 
+# ffmpeg for audio extraction from video recordings
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 COPY . .
 
 ENV PYTHONPATH=/app

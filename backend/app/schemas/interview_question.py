@@ -63,3 +63,18 @@ class InterviewQuestionSummary(BaseModel):
     archived_count: int
     unique_companies: int
     most_recent_date: date | None
+
+
+class FileImportResult(BaseModel):
+    questions: list[InterviewQuestionOut]
+    imported_count: int
+    errors: list[str] | None = None
+
+
+class TranscribeResult(BaseModel):
+    transcript: str
+    parsed_questions: list[dict]
+
+
+class BulkCreateRequest(BaseModel):
+    questions: list[InterviewQuestionCreate]
