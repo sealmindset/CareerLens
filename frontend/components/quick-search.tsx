@@ -29,8 +29,8 @@ const navigationItems: SearchItem[] = [
   },
   {
     label: "Job Listings",
-    href: "/jobs",
-    keywords: ["jobs", "positions", "openings", "companies"],
+    href: "/agents",
+    keywords: ["jobs", "positions", "openings", "companies", "listings"],
     permission: { resource: "jobs", action: "view" },
   },
   {

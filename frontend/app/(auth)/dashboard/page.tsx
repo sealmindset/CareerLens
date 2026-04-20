@@ -271,7 +271,7 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
             <div className="flex flex-wrap gap-3">
               <button
-                onClick={() => router.push("/jobs")}
+                onClick={() => router.push("/agents")}
                 className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors"
                 style={{
                   backgroundColor: "var(--primary)",

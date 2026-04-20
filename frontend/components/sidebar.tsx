@@ -9,7 +9,6 @@ import {
   LogOut,
   Users,
   Shield,
-  Briefcase,
   FileStack,
   Bot,
   CalendarClock,
@@ -50,12 +49,6 @@ const mainNavItems: NavItem[] = [
     href: "/resumes",
     icon: FileStack,
     permission: { resource: "resumes", action: "view" },
-  },
-  {
-    label: "Job Listings",
-    href: "/jobs",
-    icon: Briefcase,
-    permission: { resource: "jobs", action: "view" },
   },
   {
     label: "Application Studio",
@@ -166,6 +159,13 @@ export function Sidebar() {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  onClick={() => {
+                    if (isActive) {
+                      window.dispatchEvent(
+                        new CustomEvent("sidebar-nav-reset", { detail: item.href }),
+                      );
+                    }
+                  }}
                   className={cn(
                     "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                     isActive

@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
-import { useSearchParams } from "next/navigation";
-import { apiGet, apiPost, apiPut, apiDownload } from "@/lib/api";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useBreadcrumbs } from "@/components/breadcrumbs";
+import { type ColumnDef } from "@tanstack/react-table";
+import { apiGet, apiPost, apiPut, apiDelete, apiDownload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatRelative } from "@/lib/utils";
+import { formatRelative, formatDate } from "@/lib/utils";
+import { DataTable } from "@/components/data-table";
+import { DataTableColumnHeader } from "@/components/data-table-column-header";
 import { MarkdownContent } from "@/components/markdown-content";
 import { ResumeChatDrawer } from "@/components/resume-chat-drawer";
 import type { ResumeChatAgent } from "@/lib/types";
@@ -23,6 +27,8 @@ import type {
   ChatbotSubmitResult,
   EnrichedRequirement,
   JobListing,
+  JobScrapeResult,
+  DiscoverResult,
   PreflightResult,
   AgentTaskResult,
   PipelineRun,
@@ -73,6 +79,10 @@ import {
   Check,
   AlertTriangle,
   BookPlus,
+  Plus,
+  Globe,
+  CheckCircle,
+  Trash2,
 } from "lucide-react";
 
 const INTERVIEW_STAGES: { value: string; label: string }[] = [
@@ -323,6 +333,248 @@ export default function AgentsPage() {
   const [activeQuestionIdx, setActiveQuestionIdx] = useState(0);
   const [editingAnswer, setEditingAnswer] = useState("");
   const [chatbotSubmitResult, setChatbotSubmitResult] = useState<ChatbotSubmitResult | null>(null);
+
+  // Job creation state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addUrl, setAddUrl] = useState("");
+  const [addTitle, setAddTitle] = useState("");
+  const [addCompany, setAddCompany] = useState("");
+  const [addDescription, setAddDescription] = useState("");
+  const [addLocation, setAddLocation] = useState("");
+  const [addSource, setAddSource] = useState("");
+  const [addNotes, setAddNotes] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
+  const [scraping, setScraping] = useState(false);
+  const [scraped, setScraped] = useState(false);
+  const [scrapeError, setScrapeError] = useState("");
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [showDiscover, setShowDiscover] = useState(false);
+  const [discoverQuery, setDiscoverQuery] = useState("");
+  const [discoverLocation, setDiscoverLocation] = useState("");
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverResult, setDiscoverResult] = useState<DiscoverResult | null>(null);
+  const [activeSuggestionIdx, setActiveSuggestionIdx] = useState(0);
+  const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  // Navigation helpers
+  const router = useRouter();
+  const breadcrumbs = useBreadcrumbs();
+
+  const canCreateJob = hasPermission("jobs", "create");
+  const canDeleteJob = hasPermission("jobs", "delete");
+
+  const backToJobPicker = useCallback(() => {
+    setWorkspace(null);
+    setSelectedAppId(null);
+    setSelectedJob(null);
+  }, []);
+
+  const refreshJobs = useCallback(async () => {
+    try {
+      const [jobs, apps] = await Promise.all([
+        apiGet<JobListing[]>("/jobs"),
+        apiGet<Application[]>("/applications"),
+      ]);
+      setJobListings(jobs);
+      setApplications(apps);
+    } catch { /* ignore */ }
+  }, []);
+
+  const scrapeUrl = useCallback(async (url: string) => {
+    if (!url.startsWith("http")) return;
+    setScraping(true);
+    setScraped(false);
+    setScrapeError("");
+    try {
+      const result = await apiPost<JobScrapeResult>("/jobs/scrape", { url });
+      if (result.error) {
+        setScrapeError(result.error);
+        return;
+      }
+      if (result.title) setAddTitle(result.title);
+      if (result.company) setAddCompany(result.company);
+      if (result.description) setAddDescription(result.description);
+      if (result.location) setAddLocation(result.location);
+      if (result.source) setAddSource(result.source);
+      setScraped(true);
+    } catch {
+      setScrapeError("Could not scrape this URL. You can still fill in the details manually.");
+    } finally {
+      setScraping(false);
+    }
+  }, []);
+
+  const handleUrlChange = useCallback((value: string) => {
+    setAddUrl(value);
+    setScraped(false);
+    setScrapeError("");
+  }, []);
+
+  const handleUrlBlur = useCallback(() => {
+    if (addUrl.startsWith("http") && !scraped && !scraping && !addTitle) {
+      scrapeUrl(addUrl);
+    }
+  }, [addUrl, scraped, scraping, addTitle, scrapeUrl]);
+
+  const handleUrlPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData("text").trim();
+    if (pasted.startsWith("http")) {
+      setTimeout(() => scrapeUrl(pasted), 100);
+    }
+  }, [scrapeUrl]);
+
+  const resetAddForm = useCallback(() => {
+    setAddUrl("");
+    setAddTitle("");
+    setAddCompany("");
+    setAddDescription("");
+    setAddLocation("");
+    setAddSource("");
+    setAddNotes("");
+    setScraped(false);
+    setScrapeError("");
+  }, []);
+
+  const addJob = async () => {
+    setAddSaving(true);
+    try {
+      const newJob = await apiPost<JobListing>("/jobs", {
+        url: addUrl || null,
+        title: addTitle || null,
+        company: addCompany || null,
+        description: addDescription || null,
+        location: addLocation || null,
+        source: addSource || "manual",
+        notes: addNotes || null,
+      });
+      setShowAddModal(false);
+      resetAddForm();
+      setJobListings((prev) => [...prev, newJob]);
+      loadWorkspace(newJob);
+    } catch (err) {
+      console.error("Failed to add job:", err);
+    } finally {
+      setAddSaving(false);
+    }
+  };
+
+  const importFromUrl = async () => {
+    setImporting(true);
+    setImportError("");
+    try {
+      const newJob = await apiPost<JobListing>("/jobs/import", { url: importUrl });
+      setShowImportModal(false);
+      setImportUrl("");
+      setJobListings((prev) => [...prev, newJob]);
+      loadWorkspace(newJob);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Import failed";
+      setImportError(message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const runDiscover = async () => {
+    setDiscovering(true);
+    setDiscoverResult(null);
+    setActiveSuggestionIdx(0);
+    try {
+      const result = await apiPost<DiscoverResult>("/jobs/discover", {
+        query: discoverQuery,
+        location: discoverLocation,
+      });
+      setDiscoverResult(result);
+    } catch (err) {
+      console.error("Discover failed:", err);
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const updateBoardLinks = (keywords: string) => {
+    if (!discoverResult) return;
+    const kw = encodeURIComponent(keywords);
+    const loc = discoverLocation ? encodeURIComponent(discoverLocation) : "";
+    const links = [
+      { board: "LinkedIn", url: loc ? `https://www.linkedin.com/jobs/search/?keywords=${kw}&location=${loc}` : `https://www.linkedin.com/jobs/search/?keywords=${kw}` },
+      { board: "Indeed", url: loc ? `https://www.indeed.com/jobs?q=${kw}&l=${loc}` : `https://www.indeed.com/jobs?q=${kw}` },
+      { board: "Glassdoor", url: loc ? `https://www.glassdoor.com/Job/jobs.htm?sc.keyword=${kw}&locKeyword=${loc}` : `https://www.glassdoor.com/Job/jobs.htm?sc.keyword=${kw}` },
+      { board: "Google Jobs", url: `https://www.google.com/search?q=${kw}+jobs${loc ? `+${loc}` : ""}` },
+    ];
+    setDiscoverResult({ ...discoverResult, search_links: links });
+  };
+
+  const analyzeJob = async (id: string) => {
+    setAnalyzingIds((prev) => new Set(prev).add(id));
+    try {
+      await apiPost(`/jobs/${id}/analyze`);
+      await refreshJobs();
+      if (selectedJob?.id === id) {
+        const updated = await apiGet<JobListing>(`/jobs/${id}`);
+        setSelectedJob(updated);
+      }
+    } catch (err) {
+      console.error("Failed to analyze job:", err);
+    } finally {
+      setAnalyzingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  const deleteJob = async (job: JobListing) => {
+    const confirmMsg =
+      `Delete "${job.title}" at ${job.company}?\n\n` +
+      `This also removes its application and every workspace artifact ` +
+      `(tailored/amplified resumes, match analysis, etc.). This cannot be undone.`;
+    if (!confirm(confirmMsg)) return;
+    setDeletingIds((prev) => new Set(prev).add(job.id));
+    try {
+      await apiDelete(`/jobs/${job.id}`);
+      setJobListings((prev) => prev.filter((j) => j.id !== job.id));
+      if (selectedJob?.id === job.id) backToJobPicker();
+    } catch (err) {
+      console.error("Failed to delete job:", err);
+      alert(err instanceof Error ? `Delete failed: ${err.message}` : "Delete failed. Please try again.");
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(job.id);
+        return next;
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (selectedJob && workspace) {
+      const jobLabel = `${selectedJob.title} at ${selectedJob.company}`;
+      breadcrumbs.set([
+        { label: "Application Studio", onClick: backToJobPicker },
+        { label: jobLabel },
+      ]);
+    } else {
+      breadcrumbs.set([{ label: "Application Studio" }]);
+    }
+  }, [selectedJob, workspace, breadcrumbs, backToJobPicker]);
+
+  useEffect(() => {
+    return () => breadcrumbs.clear();
+  }, [breadcrumbs]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      if ((e as CustomEvent).detail === "/agents") backToJobPicker();
+    };
+    window.addEventListener("sidebar-nav-reset", handler);
+    return () => window.removeEventListener("sidebar-nav-reset", handler);
+  }, [backToJobPicker]);
 
   // Scroll to artifact viewer when an artifact is selected; clear any prior download error
   useEffect(() => {
@@ -1015,6 +1267,172 @@ export default function AgentsPage() {
 
   // ─── Workspace view (main landing) ─────────────────────────────────
 
+  const jobStatusColors: Record<string, { bg: string; text: string }> = {
+    new: { bg: "rgba(59,130,246,0.1)", text: "rgb(59,130,246)" },
+    analyzing: { bg: "rgba(234,179,8,0.1)", text: "rgb(161,98,7)" },
+    analyzed: { bg: "rgba(16,185,129,0.1)", text: "rgb(5,150,105)" },
+    applied: { bg: "rgba(139,92,246,0.1)", text: "rgb(124,58,237)" },
+    archived: { bg: "rgba(107,114,128,0.1)", text: "rgb(107,114,128)" },
+  };
+
+  const jobPickerColumns = useMemo<ColumnDef<JobListing, unknown>[]>(
+    () => [
+      {
+        accessorKey: "title",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Title" />
+        ),
+        cell: ({ row }) => (
+          <span className="font-medium">{row.getValue("title") || "Untitled"}</span>
+        ),
+      },
+      {
+        accessorKey: "company",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Company" />
+        ),
+        cell: ({ row }) => row.getValue("company") || "Unknown",
+      },
+      {
+        accessorKey: "location",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Location" />
+        ),
+        cell: ({ row }) => {
+          const loc = row.getValue("location") as string | null;
+          return loc || <span style={{ color: "var(--muted-foreground)" }}>--</span>;
+        },
+      },
+      {
+        accessorKey: "match_score",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Match Score" />
+        ),
+        cell: ({ row }) => {
+          const score = row.getValue("match_score") as number | null;
+          if (score === null || score === undefined) {
+            return <span style={{ color: "var(--muted-foreground)" }}>--</span>;
+          }
+          const pct = Math.round(score);
+          const barColor =
+            pct >= 75 ? "#10b981" : pct >= 50 ? "#eab308" : "#ef4444";
+          return (
+            <div className="flex items-center gap-2">
+              <div
+                className="h-2 w-16 rounded-full"
+                style={{ backgroundColor: "var(--muted)" }}
+              >
+                <div
+                  className="h-2 rounded-full transition-all"
+                  style={{ width: `${pct}%`, backgroundColor: barColor }}
+                />
+              </div>
+              <span className="text-xs font-medium">{pct}%</span>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "status",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Status" />
+        ),
+        cell: ({ row }) => {
+          const status = row.getValue("status") as string;
+          const colors = jobStatusColors[status] || jobStatusColors.new;
+          return (
+            <span
+              className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
+              style={{ backgroundColor: colors.bg, color: colors.text }}
+            >
+              {status}
+            </span>
+          );
+        },
+        filterFn: "arrIncludes",
+      },
+      {
+        id: "application",
+        header: "Application",
+        cell: ({ row }) => {
+          const existingApp = applications.find(
+            (a) => a.job_listing_id === row.original.id,
+          );
+          return existingApp ? (
+            <span
+              className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
+              style={{ backgroundColor: "rgba(16,185,129,0.1)", color: "rgb(5,150,105)" }}
+            >
+              Started
+            </span>
+          ) : (
+            <span style={{ color: "var(--muted-foreground)" }}>--</span>
+          );
+        },
+      },
+      {
+        accessorKey: "created_at",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title="Created" />
+        ),
+        cell: ({ row }) => formatDate(row.getValue("created_at")),
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => {
+          const job = row.original;
+          const isAnalyzing = analyzingIds.has(job.id);
+          return (
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => analyzeJob(job.id)}
+                disabled={isAnalyzing}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
+                title="Analyze job"
+              >
+                {isAnalyzing ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Zap className="h-3 w-3" />
+                )}
+                Analyze
+              </button>
+              {job.url && (
+                <a
+                  href={job.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center rounded-md p-1 transition-colors hover:bg-accent"
+                  title="Open listing"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              {canDeleteJob && (
+                <button
+                  onClick={() => deleteJob(job)}
+                  disabled={deletingIds.has(job.id)}
+                  className="inline-flex items-center rounded-md p-1 transition-colors hover:bg-red-50 disabled:opacity-50"
+                  style={{ color: "rgb(220,38,38)" }}
+                  title="Delete job"
+                >
+                  {deletingIds.has(job.id) ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </button>
+              )}
+            </div>
+          );
+        },
+      },
+    ],
+    [applications, analyzingIds, deletingIds, canDeleteJob],
+  );
+
   const resumeChatOverlays = (
     <>
       {resumeChatAgent && workspace && (
@@ -1069,22 +1487,407 @@ export default function AgentsPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Application Studio</h1>
             <p style={{ color: "var(--muted-foreground)" }}>
-              Select a job listing and let AI agents craft your application — tailored resume, cover letter, interview prep, and more.
+              Add a job listing and let AI agents craft your application — tailored resume, cover letter, interview prep, and more.
             </p>
           </div>
-          {applications.length > 0 && (
-            <button
-              onClick={handleExportCsv}
-              disabled={exporting}
-              className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50 shrink-0"
-              style={{ borderColor: "var(--border)" }}
-              title="Export all applications as CSV"
-            >
-              {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-              Export CSV
-            </button>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {!workspace && canCreateJob && (
+              <>
+                <button
+                  onClick={() => setShowDiscover(!showDiscover)}
+                  className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  style={{
+                    borderColor: showDiscover ? "var(--primary)" : "var(--border)",
+                    color: showDiscover ? "var(--primary)" : undefined,
+                  }}
+                >
+                  <Search className="h-4 w-4" />
+                  Discover Jobs
+                </button>
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <Download className="h-4 w-4" />
+                  Import from URL
+                </button>
+                <button
+                  onClick={() => { resetAddForm(); setShowAddModal(true); }}
+                  className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: "var(--primary)",
+                    color: "var(--primary-foreground)",
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Job
+                </button>
+              </>
+            )}
+            {applications.length > 0 && (
+              <button
+                onClick={handleExportCsv}
+                disabled={exporting}
+                className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
+                style={{ borderColor: "var(--border)" }}
+                title="Export all applications as CSV"
+              >
+                {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                Export CSV
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Add Job Modal */}
+        {showAddModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            onClick={() => setShowAddModal(false)}
+          >
+            <div
+              className="w-full max-w-md rounded-xl border p-6 shadow-lg"
+              style={{
+                backgroundColor: "var(--card)",
+                borderColor: "var(--border)",
+                color: "var(--card-foreground)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Add Job Listing</h2>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="rounded p-1 transition-colors hover:bg-accent"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Job URL <span className="text-muted-foreground font-normal">(optional for recruiter/referral)</span></label>
+                  <div className="relative">
+                    <input
+                      type="url"
+                      value={addUrl}
+                      onChange={(e) => handleUrlChange(e.target.value)}
+                      onBlur={handleUrlBlur}
+                      onPaste={handleUrlPaste}
+                      placeholder="Paste a job listing URL to auto-fill details..."
+                      className="w-full rounded-md border px-3 py-2 pr-10 text-sm outline-none focus:ring-1 focus:ring-ring"
+                      style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                    />
+                    {scraping && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--primary)" }} />
+                      </div>
+                    )}
+                    {scraped && !scraping && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <CheckCircle className="h-4 w-4" style={{ color: "#10b981" }} />
+                      </div>
+                    )}
+                  </div>
+                  {scraping && (
+                    <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                      Scraping job details... this may take a moment.
+                    </p>
+                  )}
+                  {scrapeError && (
+                    <p className="text-xs mt-1 flex items-center gap-1" style={{ color: "#ef4444" }}>
+                      <AlertCircle className="h-3 w-3" />
+                      {scrapeError}
+                    </p>
+                  )}
+                  {scraped && !scraping && (
+                    <p className="text-xs mt-1" style={{ color: "#10b981" }}>
+                      Job details auto-filled. Review and edit below.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={addTitle}
+                    onChange={(e) => setAddTitle(e.target.value)}
+                    placeholder={scraping ? "Extracting..." : ""}
+                    className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                    style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Company</label>
+                    <input
+                      type="text"
+                      value={addCompany}
+                      onChange={(e) => setAddCompany(e.target.value)}
+                      className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                      style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Location</label>
+                    <input
+                      type="text"
+                      value={addLocation}
+                      onChange={(e) => setAddLocation(e.target.value)}
+                      className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                      style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Source</label>
+                  <select
+                    value={addSource}
+                    onChange={(e) => setAddSource(e.target.value)}
+                    className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                    style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                  >
+                    <option value="">Manual</option>
+                    <option value="recruiter">Recruiter</option>
+                    <option value="referral">Referral</option>
+                    <option value="linkedin">LinkedIn</option>
+                    <option value="indeed">Indeed</option>
+                    <option value="glassdoor">Glassdoor</option>
+                    <option value="company_site">Company Site</option>
+                  </select>
+                </div>
+                {addDescription && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Description (scraped)</label>
+                    <textarea
+                      value={addDescription}
+                      onChange={(e) => setAddDescription(e.target.value)}
+                      rows={4}
+                      className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring resize-y"
+                      style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium mb-1">Notes</label>
+                  <textarea
+                    value={addNotes}
+                    onChange={(e) => setAddNotes(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. Recruiter name, scheduling link, context..."
+                    className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring resize-y"
+                    style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setShowAddModal(false)}
+                    className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={addJob}
+                    disabled={(!addUrl.trim() && (!addTitle.trim() || !addCompany.trim())) || addSaving || scraping}
+                    className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                  >
+                    {addSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Add Job
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Import from URL Modal */}
+        {showImportModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            onClick={() => setShowImportModal(false)}
+          >
+            <div
+              className="w-full max-w-md rounded-xl border p-6 shadow-lg"
+              style={{
+                backgroundColor: "var(--card)",
+                borderColor: "var(--border)",
+                color: "var(--card-foreground)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Import from URL</h2>
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="rounded p-1 transition-colors hover:bg-accent"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
+                Paste a job listing URL and we will automatically scrape the details and create the listing for you.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Job URL</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2">
+                      <Globe className="h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
+                    </span>
+                    <input
+                      type="url"
+                      value={importUrl}
+                      onChange={(e) => { setImportUrl(e.target.value); setImportError(""); }}
+                      placeholder="https://www.linkedin.com/jobs/view/..."
+                      className="w-full rounded-md border pl-10 pr-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                      style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                    />
+                  </div>
+                </div>
+                {importError && (
+                  <p className="text-xs flex items-center gap-1" style={{ color: "#ef4444" }}>
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    {importError}
+                  </p>
+                )}
+                {importing && (
+                  <div className="flex items-center gap-2 rounded-md p-3 text-sm"
+                    style={{ backgroundColor: "var(--muted)" }}>
+                    <Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--primary)" }} />
+                    <span>Scraping and importing... this may take 15-30 seconds.</span>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setShowImportModal(false)}
+                    className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={importFromUrl}
+                    disabled={!importUrl.trim() || !importUrl.startsWith("http") || importing}
+                    className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                  >
+                    {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    Import
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Discover Jobs Panel */}
+        {!workspace && showDiscover && (
+          <div
+            className="rounded-xl border p-6"
+            style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <Search className="h-4 w-4" style={{ color: "var(--primary)" }} />
+              <h2 className="font-semibold">Discover Jobs</h2>
+              <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                AI-powered search suggestions based on your profile
+              </span>
+            </div>
+            <div className="flex gap-3 mb-4">
+              <input
+                type="text"
+                value={discoverQuery}
+                onChange={(e) => setDiscoverQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runDiscover()}
+                placeholder="Job title, keywords, or skills..."
+                className="flex-1 rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+              />
+              <input
+                type="text"
+                value={discoverLocation}
+                onChange={(e) => setDiscoverLocation(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runDiscover()}
+                placeholder="Location (optional)"
+                className="w-48 rounded-md border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+                style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+              />
+              <button
+                onClick={runDiscover}
+                disabled={discovering}
+                className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+              >
+                {discovering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Search
+              </button>
+            </div>
+            {discovering && (
+              <div className="flex items-center gap-2 py-8 justify-center">
+                <Loader2 className="h-5 w-5 animate-spin" style={{ color: "var(--primary)" }} />
+                <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                  Generating search suggestions from your profile...
+                </span>
+              </div>
+            )}
+            {discoverResult && !discovering && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-medium mb-2">Search Strategies</h3>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {discoverResult.suggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          setActiveSuggestionIdx(i);
+                          updateBoardLinks(s.keywords);
+                        }}
+                        className={`text-left rounded-lg border p-3 transition-colors ${
+                          i === activeSuggestionIdx ? "ring-1 ring-ring" : "hover:bg-accent/50"
+                        }`}
+                        style={{
+                          borderColor: i === activeSuggestionIdx ? "var(--primary)" : "var(--border)",
+                          backgroundColor: i === activeSuggestionIdx ? "rgba(59,130,246,0.05)" : undefined,
+                        }}
+                      >
+                        <p className="font-medium text-sm">{s.title}</p>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
+                          {s.rationale}
+                        </p>
+                        <p className="text-xs mt-1 font-mono" style={{ color: "var(--primary)" }}>
+                          {s.keywords}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium mb-2">Search on Job Boards</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {discoverResult.search_links.map((link) => (
+                      <a
+                        key={link.board}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {link.board}
+                      </a>
+                    ))}
+                  </div>
+                  <p className="text-xs mt-2" style={{ color: "var(--muted-foreground)" }}>
+                    Found a job? Use &quot;Import from URL&quot; above to add it.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Job listing selector */}
         {!workspace && (
@@ -1092,48 +1895,33 @@ export default function AgentsPage() {
             className="rounded-xl border p-6"
             style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
           >
-            <h2 className="font-semibold mb-4">Select a Job Listing</h2>
+            <h2 className="font-semibold mb-4">Job Listings</h2>
             {jobListings.length === 0 ? (
               <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                No job listings yet. Add a job listing first from the Job Listings page.
+                No job listings yet. Add one above to get started.
               </p>
             ) : (
-              <div className="space-y-2">
-                {jobListings.map((job) => {
-                  const existingApp = applications.find((a) => a.job_listing_id === job.id);
-                  return (
-                    <button
-                      key={job.id}
-                      onClick={() => loadWorkspace(job)}
-                      disabled={loadingWorkspace}
-                      className="w-full flex items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-accent"
-                      style={{ borderColor: "var(--border)" }}
-                    >
-                      <Briefcase className="h-5 w-5 shrink-0" style={{ color: "var(--primary)" }} />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">
-                          {job.title || "Untitled"} at {job.company || "Unknown"}
-                        </p>
-                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                          {job.match_score !== null && (
-                            <span className="mr-2">Match: {job.match_score}%</span>
-                          )}
-                          {job.location && <span className="mr-2">{job.location}</span>}
-                          {existingApp && (
-                            <span
-                              className="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-                              style={{ backgroundColor: "rgba(16,185,129,0.1)", color: "rgb(5,150,105)" }}
-                            >
-                              Application started
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "var(--muted-foreground)" }} />
-                    </button>
-                  );
-                })}
-              </div>
+              <DataTable
+                columns={jobPickerColumns}
+                data={jobListings}
+                searchKey="title"
+                searchPlaceholder="Search jobs..."
+                filterableColumns={[
+                  {
+                    id: "status",
+                    title: "Status",
+                    options: [
+                      { label: "New", value: "new" },
+                      { label: "Analyzing", value: "analyzing" },
+                      { label: "Analyzed", value: "analyzed" },
+                      { label: "Applied", value: "applied" },
+                      { label: "Archived", value: "archived" },
+                    ],
+                  },
+                ]}
+                storageKey="studio-job-picker"
+                onRowClick={(job) => loadWorkspace(job)}
+              />
             )}
           </div>
         )}
@@ -1199,14 +1987,46 @@ export default function AgentsPage() {
                     </a>
                   )}
                 </div>
-                <button
-                  onClick={() => { setWorkspace(null); setSelectedAppId(null); setSelectedJob(null); }}
-                  className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent shrink-0"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Back to Jobs
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => selectedJob && analyzeJob(selectedJob.id)}
+                    disabled={!selectedJob || analyzingIds.has(selectedJob?.id ?? "")}
+                    className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
+                    style={{ borderColor: "var(--border)" }}
+                    title="Analyze job"
+                  >
+                    {analyzingIds.has(selectedJob?.id ?? "") ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Zap className="h-3.5 w-3.5" />
+                    )}
+                    Analyze
+                  </button>
+                  {canDeleteJob && selectedJob && (
+                    <button
+                      onClick={() => deleteJob(selectedJob)}
+                      disabled={deletingIds.has(selectedJob.id)}
+                      className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-red-50 disabled:opacity-50"
+                      style={{ borderColor: "var(--border)", color: "rgb(220,38,38)" }}
+                      title="Delete job and all artifacts"
+                    >
+                      {deletingIds.has(selectedJob.id) ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                      Delete
+                    </button>
+                  )}
+                  <button
+                    onClick={backToJobPicker}
+                    className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back to Jobs
+                  </button>
+                </div>
               </div>
             )}
 

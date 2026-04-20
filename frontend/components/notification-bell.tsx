@@ -135,7 +135,7 @@ function getEntityRoute(
   if (!entityType || !entityId) return null;
   const routes: Record<string, string> = {
     application: `/applications/${entityId}`,
-    job: `/jobs`,
+    job: `/agents`,
     story: `/stories`,
     profile: `/profile`,
     variant: `/resumes`,

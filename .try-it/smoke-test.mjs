@@ -1,4 +1,6 @@
-import { chromium } from 'playwright';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { chromium } = require('/Volumes/PRO-BLADE/career-lens/frontend/node_modules/playwright-core');
 import fs from 'fs';
 import path from 'path';
 
@@ -13,16 +15,20 @@ const ROLES = [
 ];
 
 const PAGES = [
-  { path: '/dashboard', name: 'Dashboard' },
+  { path: '/command-center', name: 'Command Center' },
   { path: '/profile', name: 'Profile' },
-  { path: '/jobs', name: 'Jobs' },
-  { path: '/applications', name: 'Applications' },
+  { path: '/resumes', name: 'Resumes' },
   { path: '/agents', name: 'Agents' },
-  { path: '/admin/settings', name: 'Settings' },
+  { path: '/stories', name: 'Stories' },
+  { path: '/interview-questions', name: 'Interview Questions' },
+  { path: '/analytics', name: 'Analytics' },
+];
+
+const ADMIN_PAGES = [
   { path: '/admin/users', name: 'Admin Users' },
   { path: '/admin/roles', name: 'Admin Roles' },
   { path: '/admin/prompts', name: 'AI Instructions' },
-  { path: '/admin/logs', name: 'Activity Logs' },
+  { path: '/admin/settings', name: 'Admin Settings' },
 ];
 
 const results = { roles: {}, errors: [] };
@@ -52,7 +58,7 @@ async function loginAs(browser, role) {
       await page.waitForTimeout(3000);
     }
     
-    await page.waitForURL('**/dashboard**', { timeout: 15000 }).catch(() => {});
+    await page.waitForURL('**/command-center**', { timeout: 15000 }).catch(() => {});
     await page.waitForTimeout(1500);
     
     return { context, page, success: true };
@@ -81,32 +87,70 @@ async function main() {
       
       const loginSuccess = !meResponse.error;
       
-      // Screenshot dashboard
-      await page.screenshot({ path: path.join(SCREENSHOTS, `${role.sub}_dashboard.png`), fullPage: true });
-      
+      // Screenshot command center
+      await page.screenshot({ path: path.join(SCREENSHOTS, `${role.sub}_command-center.png`), fullPage: true });
+
       // Test each page
+      const allPages = role.sub === 'mock-admin' ? [...PAGES, ...ADMIN_PAGES] : PAGES;
       const pageResults = [];
-      for (const pg of PAGES) {
+      for (const pg of allPages) {
         try {
           await page.goto(`${FRONTEND}${pg.path}`, { waitUntil: 'load', timeout: 15000 });
           await page.waitForTimeout(2000);
-          
+
           const screenshot = `${role.sub}_${pg.name.toLowerCase().replace(/\s+/g, '_')}.png`;
           await page.screenshot({ path: path.join(SCREENSHOTS, screenshot), fullPage: true });
-          
+
           const bodyText = await page.locator('body').innerText().catch(() => '');
           const hasContent = bodyText.length > 50;
           const redirectedToLogin = page.url().includes('/login') || (!page.url().includes(pg.path) && page.url().endsWith('/'));
           const hasError = await page.locator('text=/Something went wrong|500 Internal|Server Error/').first().isVisible({ timeout: 500 }).catch(() => false);
-          
+
           let status;
           if (redirectedToLogin) status = 'NO ACCESS';
           else if (hasError) status = 'ERROR';
           else if (hasContent) status = 'PASS';
           else status = 'EMPTY';
-          
+
           pageResults.push({ page: pg.name, path: pg.path, passed: status === 'PASS', status, screenshot });
           console.log(`  ${pg.name}: ${status}`);
+
+          // Story Bank detail view test
+          if (pg.name === 'Stories' && status === 'PASS') {
+            const tableRow = page.locator('table tbody tr').first();
+            if (await tableRow.isVisible({ timeout: 2000 }).catch(() => false)) {
+              await tableRow.click();
+              await page.waitForTimeout(2500);
+              const detailShot = `${role.sub}_stories_detail.png`;
+              await page.screenshot({ path: path.join(SCREENSHOTS, detailShot), fullPage: true });
+              pageResults.push({ page: 'Stories Detail', path: pg.path, passed: true, status: 'PASS', screenshot: detailShot });
+              console.log(`  Stories Detail: PASS`);
+
+              // Test back button
+              const backBtn = page.locator('button:has-text("Back to Stories")');
+              if (await backBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                await backBtn.click();
+                await page.waitForTimeout(1500);
+                const backShot = `${role.sub}_stories_back.png`;
+                await page.screenshot({ path: path.join(SCREENSHOTS, backShot), fullPage: true });
+                pageResults.push({ page: 'Stories Back', path: pg.path, passed: true, status: 'PASS', screenshot: backShot });
+                console.log(`  Stories Back: PASS`);
+              }
+            }
+          }
+
+          // Agents detail view test
+          if (pg.name === 'Agents' && status === 'PASS') {
+            const tableRow = page.locator('table tbody tr').first();
+            if (await tableRow.isVisible({ timeout: 2000 }).catch(() => false)) {
+              await tableRow.click();
+              await page.waitForTimeout(2500);
+              const detailShot = `${role.sub}_agents_detail.png`;
+              await page.screenshot({ path: path.join(SCREENSHOTS, detailShot), fullPage: true });
+              pageResults.push({ page: 'Agents Detail', path: pg.path, passed: true, status: 'PASS', screenshot: detailShot });
+              console.log(`  Agents Detail: PASS`);
+            }
+          }
         } catch (err) {
           pageResults.push({ page: pg.name, path: pg.path, passed: false, status: 'TIMEOUT', error: err.message });
           console.log(`  ${pg.name}: TIMEOUT`);

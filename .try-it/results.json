@@ -1,266 +1,381 @@
-[
-  {
-    "role": "Super Admin",
-    "test": "Login",
-    "status": "PASS",
-    "note": "role: Super Admin"
+{
+  "roles": {
+    "Super Admin": {
+      "loginSuccess": true,
+      "authMe": {
+        "sub": "mock-admin",
+        "email": "admin@career-lens.local",
+        "name": "Admin User",
+        "role_id": "8f5b45f7-ae6a-52cb-b5e1-c47a5d02aea3",
+        "role_name": "Super Admin",
+        "permissions": [
+          "dashboard.view",
+          "profile.view",
+          "profile.create",
+          "profile.edit",
+          "profile.delete",
+          "jobs.view",
+          "jobs.create",
+          "jobs.edit",
+          "jobs.delete",
+          "applications.view",
+          "applications.create",
+          "applications.edit",
+          "applications.delete",
+          "agents.view",
+          "agents.create",
+          "settings.view",
+          "settings.edit",
+          "users.view",
+          "users.create",
+          "users.edit",
+          "users.delete",
+          "roles.view",
+          "roles.create",
+          "roles.edit",
+          "roles.delete",
+          "prompts.view",
+          "prompts.edit",
+          "workspace.create",
+          "workspace.delete",
+          "workspace.edit",
+          "workspace.view",
+          "app_settings.view",
+          "app_settings.edit",
+          "resumes.edit",
+          "resumes.view",
+          "stories.edit",
+          "stories.view",
+          "events.create",
+          "events.delete",
+          "events.edit",
+          "events.view",
+          "tasks.view",
+          "tasks.create",
+          "tasks.edit",
+          "tasks.delete",
+          "quick_captures.view",
+          "quick_captures.create",
+          "interview_questions.create",
+          "interview_questions.delete",
+          "interview_questions.edit",
+          "interview_questions.view"
+        ]
+      },
+      "logoutWorks": true,
+      "pages": [
+        {
+          "page": "Command Center",
+          "path": "/command-center",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_command_center.png"
+        },
+        {
+          "page": "Profile",
+          "path": "/profile",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_profile.png"
+        },
+        {
+          "page": "Resumes",
+          "path": "/resumes",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_resumes.png"
+        },
+        {
+          "page": "Agents",
+          "path": "/agents",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_agents.png"
+        },
+        {
+          "page": "Agents Detail",
+          "path": "/agents",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_agents_detail.png"
+        },
+        {
+          "page": "Stories",
+          "path": "/stories",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_stories.png"
+        },
+        {
+          "page": "Stories Detail",
+          "path": "/stories",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_stories_detail.png"
+        },
+        {
+          "page": "Stories Back",
+          "path": "/stories",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_stories_back.png"
+        },
+        {
+          "page": "Interview Questions",
+          "path": "/interview-questions",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_interview_questions.png"
+        },
+        {
+          "page": "Analytics",
+          "path": "/analytics",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_analytics.png"
+        },
+        {
+          "page": "Admin Users",
+          "path": "/admin/users",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_admin_users.png"
+        },
+        {
+          "page": "Admin Roles",
+          "path": "/admin/roles",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_admin_roles.png"
+        },
+        {
+          "page": "AI Instructions",
+          "path": "/admin/prompts",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_ai_instructions.png"
+        },
+        {
+          "page": "Admin Settings",
+          "path": "/admin/settings",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-admin_admin_settings.png"
+        }
+      ],
+      "pagesPass": 14,
+      "pagesTotal": 14
+    },
+    "Pro User": {
+      "loginSuccess": true,
+      "authMe": {
+        "sub": "mock-pro",
+        "email": "pro@career-lens.local",
+        "name": "Pro User",
+        "role_id": "ca470b8a-b525-54d9-8c28-24d6ea251362",
+        "role_name": "Pro User",
+        "permissions": [
+          "dashboard.view",
+          "profile.view",
+          "profile.create",
+          "profile.edit",
+          "profile.delete",
+          "jobs.view",
+          "jobs.create",
+          "jobs.edit",
+          "jobs.delete",
+          "applications.view",
+          "applications.create",
+          "applications.edit",
+          "applications.delete",
+          "agents.view",
+          "agents.create",
+          "settings.view",
+          "workspace.create",
+          "workspace.edit",
+          "workspace.view",
+          "resumes.edit",
+          "resumes.view",
+          "stories.edit",
+          "stories.view",
+          "events.create",
+          "events.delete",
+          "events.edit",
+          "events.view",
+          "tasks.view",
+          "tasks.create",
+          "tasks.edit",
+          "tasks.delete",
+          "quick_captures.view",
+          "quick_captures.create",
+          "interview_questions.create",
+          "interview_questions.delete",
+          "interview_questions.edit",
+          "interview_questions.view"
+        ]
+      },
+      "logoutWorks": true,
+      "pages": [
+        {
+          "page": "Command Center",
+          "path": "/command-center",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-pro_command_center.png"
+        },
+        {
+          "page": "Profile",
+          "path": "/profile",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-pro_profile.png"
+        },
+        {
+          "page": "Resumes",
+          "path": "/resumes",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-pro_resumes.png"
+        },
+        {
+          "page": "Agents",
+          "path": "/agents",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-pro_agents.png"
+        },
+        {
+          "page": "Agents Detail",
+          "path": "/agents",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-pro_agents_detail.png"
+        },
+        {
+          "page": "Stories",
+          "path": "/stories",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-pro_stories.png"
+        },
+        {
+          "page": "Interview Questions",
+          "path": "/interview-questions",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-pro_interview_questions.png"
+        },
+        {
+          "page": "Analytics",
+          "path": "/analytics",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-pro_analytics.png"
+        }
+      ],
+      "pagesPass": 8,
+      "pagesTotal": 8
+    },
+    "User": {
+      "loginSuccess": true,
+      "authMe": {
+        "sub": "mock-user",
+        "email": "user@career-lens.local",
+        "name": "Regular User",
+        "role_id": "7f67a8ac-03b0-5cd6-823e-2cafa7a92063",
+        "role_name": "User",
+        "permissions": [
+          "profile.view",
+          "jobs.view",
+          "applications.view",
+          "agents.view",
+          "dashboard.view",
+          "workspace.view",
+          "resumes.edit",
+          "resumes.view",
+          "stories.edit",
+          "stories.view",
+          "profile.edit",
+          "jobs.create",
+          "jobs.edit",
+          "jobs.delete",
+          "applications.create",
+          "applications.edit",
+          "applications.delete",
+          "agents.create",
+          "workspace.create",
+          "workspace.edit",
+          "events.create",
+          "events.delete",
+          "events.edit",
+          "events.view",
+          "tasks.view",
+          "tasks.create",
+          "tasks.edit",
+          "tasks.delete",
+          "quick_captures.view",
+          "quick_captures.create",
+          "interview_questions.create",
+          "interview_questions.delete",
+          "interview_questions.edit",
+          "interview_questions.view"
+        ]
+      },
+      "logoutWorks": true,
+      "pages": [
+        {
+          "page": "Command Center",
+          "path": "/command-center",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-user_command_center.png"
+        },
+        {
+          "page": "Profile",
+          "path": "/profile",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-user_profile.png"
+        },
+        {
+          "page": "Resumes",
+          "path": "/resumes",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-user_resumes.png"
+        },
+        {
+          "page": "Agents",
+          "path": "/agents",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-user_agents.png"
+        },
+        {
+          "page": "Stories",
+          "path": "/stories",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-user_stories.png"
+        },
+        {
+          "page": "Interview Questions",
+          "path": "/interview-questions",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-user_interview_questions.png"
+        },
+        {
+          "page": "Analytics",
+          "path": "/analytics",
+          "passed": true,
+          "status": "PASS",
+          "screenshot": "mock-user_analytics.png"
+        }
+      ],
+      "pagesPass": 7,
+      "pagesTotal": 7
+    }
   },
-  {
-    "role": "Super Admin",
-    "test": "Dashboard",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Super Admin",
-    "test": "Profile",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Super Admin",
-    "test": "Jobs",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Super Admin",
-    "test": "Applications",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Super Admin",
-    "test": "Agents",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Super Admin",
-    "test": "Admin Users",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Super Admin",
-    "test": "Admin Roles",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Super Admin",
-    "test": "Admin Prompts",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Super Admin",
-    "test": "Admin Settings",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Super Admin",
-    "test": "Logout",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Login",
-    "status": "PASS",
-    "note": "role: Admin"
-  },
-  {
-    "role": "Admin",
-    "test": "Dashboard",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Profile",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Jobs",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Applications",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Agents",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Admin Users",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Admin Roles",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Admin Prompts",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Admin Settings",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Admin",
-    "test": "Logout",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Pro User",
-    "test": "Login",
-    "status": "PASS",
-    "note": "role: Pro User"
-  },
-  {
-    "role": "Pro User",
-    "test": "Dashboard",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Pro User",
-    "test": "Profile",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Pro User",
-    "test": "Jobs",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Pro User",
-    "test": "Applications",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Pro User",
-    "test": "Agents",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "Pro User",
-    "test": "Admin Users",
-    "status": "N/A",
-    "note": "No access (expected)"
-  },
-  {
-    "role": "Pro User",
-    "test": "Admin Roles",
-    "status": "N/A",
-    "note": "No access (expected)"
-  },
-  {
-    "role": "Pro User",
-    "test": "Admin Prompts",
-    "status": "N/A",
-    "note": "No access (expected)"
-  },
-  {
-    "role": "Pro User",
-    "test": "Admin Settings",
-    "status": "N/A",
-    "note": "No access (expected)"
-  },
-  {
-    "role": "Pro User",
-    "test": "Logout",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "User",
-    "test": "Login",
-    "status": "PASS",
-    "note": "role: User"
-  },
-  {
-    "role": "User",
-    "test": "Dashboard",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "User",
-    "test": "Profile",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "User",
-    "test": "Jobs",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "User",
-    "test": "Applications",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "User",
-    "test": "Agents",
-    "status": "PASS",
-    "note": ""
-  },
-  {
-    "role": "User",
-    "test": "Admin Users",
-    "status": "N/A",
-    "note": "No access (expected)"
-  },
-  {
-    "role": "User",
-    "test": "Admin Roles",
-    "status": "N/A",
-    "note": "No access (expected)"
-  },
-  {
-    "role": "User",
-    "test": "Admin Prompts",
-    "status": "N/A",
-    "note": "No access (expected)"
-  },
-  {
-    "role": "User",
-    "test": "Admin Settings",
-    "status": "N/A",
-    "note": "No access (expected)"
-  },
-  {
-    "role": "User",
-    "test": "Logout",
-    "status": "PASS",
-    "note": ""
-  }
-]
+  "errors": []
+}

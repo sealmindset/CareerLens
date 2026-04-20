@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { Sidebar, SidebarTrigger } from "@/components/sidebar";
-import { Breadcrumbs } from "@/components/breadcrumbs";
+import { BreadcrumbProvider, Breadcrumbs } from "@/components/breadcrumbs";
 import { QuickSearch } from "@/components/quick-search";
 import { NotificationBell } from "@/components/notification-bell";
 import { ModeToggle } from "@/components/mode-toggle";
@@ -64,7 +64,9 @@ export default function AuthLayout({
 }) {
   return (
     <AuthProvider>
-      <AuthenticatedShell>{children}</AuthenticatedShell>
+      <BreadcrumbProvider>
+        <AuthenticatedShell>{children}</AuthenticatedShell>
+      </BreadcrumbProvider>
     </AuthProvider>
   );
 }
