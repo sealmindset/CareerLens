@@ -37,4 +37,4 @@
 ## Known Issues / Next Session
 - [ ] Skill Gap Check UI (outlier detection) only appears right after Quick Capture processes a JD — add a persistent way to re-run it from Application Studio on existing job listings
 - [ ] Re-run Tailor on Wealth Enhancement Group application to get an Identity-Shield-protected resume
-- [ ] Address 10 Dependabot security vulnerabilities flagged on GitHub (3 high, 6 moderate, 1 low)
+- [x] Address 10 Dependabot security vulnerabilities flagged on GitHub (3 high, 6 moderate, 1 low) — 7 npm already fixed; pinned python-multipart>=0.0.26 and cryptography>=46.0.7 for remaining 3

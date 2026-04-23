@@ -8,9 +8,10 @@ PyJWT
 httpx
 anthropic
 azure-identity
+cryptography>=46.0.7
 beautifulsoup4
 python-dateutil
-python-multipart
+python-multipart>=0.0.26
 PyPDF2
 python-docx
 markdown

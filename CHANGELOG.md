@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased] - 2026-04-23
+
+### Security
+- **Dependabot vulnerability fixes**: Pinned `python-multipart>=0.0.26` (CVE: DoS via large multipart preamble/epilogue, alert #10) and `cryptography>=46.0.7` (buffer overflow with non-contiguous buffers alert #7, incomplete DNS name constraint enforcement alert #4) in `backend/requirements.txt`. All 3 open Dependabot alerts resolved; 7 npm alerts were already fixed.
+
 ## [Unreleased] - 2026-04-16
 
 ### Fixed
