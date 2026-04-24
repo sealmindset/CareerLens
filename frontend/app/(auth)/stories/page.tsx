@@ -128,6 +128,7 @@ export default function StoryBankPage() {
     return () => window.removeEventListener("sidebar-nav-reset", handler);
   }, [backToList]);
 
+
   // DataTable columns
   const storyColumns = useMemo<ColumnDef<StoryBankStory, unknown>[]>(
     () => [
@@ -439,6 +440,13 @@ export default function StoryBankPage() {
   useEffect(() => {
     loadStories();
     loadSummary();
+  }, [loadStories, loadSummary]);
+
+  // Refresh when a story is saved via Story Builder from another page
+  useEffect(() => {
+    const handler = () => { void loadStories(); void loadSummary(); };
+    window.addEventListener("story-bank-refresh", handler);
+    return () => window.removeEventListener("story-bank-refresh", handler);
   }, [loadStories, loadSummary]);
 
   const loadDetail = async (id: string) => {
@@ -1393,7 +1401,6 @@ export default function StoryBankPage() {
         <DataTable
           columns={storyColumns}
           data={stories}
-          searchKey="story_title"
           searchPlaceholder="Search stories..."
           filterableColumns={filterableColumns}
           storageKey="story-bank-table"

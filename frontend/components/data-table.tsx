@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -31,6 +31,20 @@ const arrIncludesFilter: FilterFn<unknown> = (
   const value = String(row.getValue(columnId) ?? "");
   return filterValue.includes(value);
 };
+
+// Global filter: case-insensitive substring across all string/array fields
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const globalSubstringFilter: FilterFn<any> = (row, _columnId, filterValue: string) => {
+  if (!filterValue) return true;
+  const term = filterValue.toLowerCase();
+  const data = row.original as Record<string, unknown>;
+  return Object.values(data).some((val) => {
+    if (typeof val === "string") return val.toLowerCase().includes(term);
+    if (Array.isArray(val)) return val.some((v) => typeof v === "string" && v.toLowerCase().includes(term));
+    return false;
+  });
+};
+globalSubstringFilter.autoRemove = (val: unknown) => !val;
 
 interface FilterableColumn {
   id: string;
@@ -95,6 +109,9 @@ export function DataTable<TData, TValue>({
   const [pagination, setPagination] = useState<PaginationState>(() =>
     loadState(sk, "pagination", { pageIndex: 0, pageSize: 20 }),
   );
+  const [globalFilter, setGlobalFilter] = useState<string>(() =>
+    loadState(sk, "globalFilter", ""),
+  );
 
   // Persist state changes
   useEffect(() => saveState(sk, "sorting", sorting), [sk, sorting]);
@@ -110,21 +127,25 @@ export function DataTable<TData, TValue>({
     () => saveState(sk, "pagination", pagination),
     [sk, pagination],
   );
+  useEffect(() => saveState(sk, "globalFilter", globalFilter), [sk, globalFilter]);
 
   const table = useReactTable({
     data,
     columns,
-    filterFns: { arrIncludes: arrIncludesFilter },
+    filterFns: { arrIncludes: arrIncludesFilter, globalSubstring: globalSubstringFilter },
+    globalFilterFn: globalSubstringFilter,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
       pagination,
+      globalFilter,
     },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),

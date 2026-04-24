@@ -25,29 +25,35 @@ export function DataTableToolbar<TData>({
   filterableColumns = [],
 }: DataTableToolbarProps<TData>) {
   const activeFilterCount = table.getState().columnFilters.length;
-  const searchValue = searchKey
+  const globalFilter = (table.getState().globalFilter as string) ?? "";
+  const columnSearchValue = searchKey
     ? (table.getColumn(searchKey)?.getFilterValue() as string) ?? ""
     : "";
+  const searchValue = searchKey ? columnSearchValue : globalFilter;
 
   const isFiltered =
-    activeFilterCount > 0 || (searchKey && searchValue.length > 0);
+    activeFilterCount > 0 || searchValue.length > 0;
+
+  const handleSearchChange = (value: string) => {
+    if (searchKey) {
+      table.getColumn(searchKey)?.setFilterValue(value);
+    } else {
+      table.setGlobalFilter(value);
+    }
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {/* Global search on a specific column */}
-      {searchKey && (
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            placeholder={searchPlaceholder}
-            value={searchValue}
-            onChange={(e) =>
-              table.getColumn(searchKey)?.setFilterValue(e.target.value)
-            }
-            className="w-full rounded-md border border-input bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </div>
-      )}
+      {/* Search: column-specific if searchKey provided, otherwise global */}
+      <div className="relative flex-1 min-w-[200px] max-w-sm">
+        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          placeholder={searchPlaceholder}
+          value={searchValue}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          className="w-full rounded-md border border-input bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </div>
 
       {/* Faceted filter buttons (one per filterable column) */}
       {filterableColumns.map((fc) => {
@@ -75,6 +81,7 @@ export function DataTableToolbar<TData>({
         <button
           onClick={() => {
             table.resetColumnFilters();
+            table.setGlobalFilter("");
           }}
           className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         >

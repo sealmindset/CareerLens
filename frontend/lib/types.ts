@@ -913,3 +913,30 @@ export interface InterviewJournalEntry {
   created_at: string;
   updated_at: string;
 }
+
+export interface StoryBuilderMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface StoryBuilderPreview {
+  resume_bullet?: string;
+  story_title?: string;
+  problem?: string;
+  solved?: string;
+  deployed?: string;
+  takeaway?: string;
+  trigger_keywords?: string[];
+  proof_metric?: string;
+}
+
+export interface StoryBuilderChatResponse {
+  reply: string;
+  has_structured_story: boolean;
+  structured_story?: StoryBuilderPreview;
+}
+
+export interface StoryBuilderSaveResponse {
+  story_id: string;
+  story_title: string;
+}
