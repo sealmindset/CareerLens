@@ -13,7 +13,8 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { ResumeChatDrawer } from "@/components/resume-chat-drawer";
 import { PipelineStageIndicator } from "@/components/pipeline-stage-indicator";
 import { InterviewJournal } from "@/components/interview-journal";
-import type { ResumeChatAgent } from "@/lib/types";
+import { StoryBuilderDrawer } from "@/components/story-builder-drawer";
+import type { ResumeChatAgent, StoryBuilderSaveResponse } from "@/lib/types";
 import type {
   AgentConversation,
   AgentMessage,
@@ -310,11 +311,13 @@ export default function AgentsPage() {
   // Skill Gap Check state
   const [skillGapResults, setSkillGapResults] = useState<import("@/lib/types").EnrichedRequirement[] | null>(null);
   const [checkingSkillGaps, setCheckingSkillGaps] = useState(false);
-  const [skillGapConfirmIdx, setSkillGapConfirmIdx] = useState<number | null>(null);
-  const [skillGapDesc, setSkillGapDesc] = useState("");
-  const [skillGapCompany, setSkillGapCompany] = useState("");
-  const [skillGapRepo, setSkillGapRepo] = useState("");
-  const [savingSkillGap, setSavingSkillGap] = useState(false);
+  // Story Builder drawer state
+  const [storyBuilderOpen, setStoryBuilderOpen] = useState(false);
+  const [storyBuilderContext, setStoryBuilderContext] = useState<{
+    requirementText: string;
+    skillName: string;
+    skillGapIdx: number;
+  } | null>(null);
 
   // Auto-Fill modal state
   const [showAutoFillModal, setShowAutoFillModal] = useState(false);
@@ -925,7 +928,8 @@ export default function AgentsPage() {
     setTaskResult(null);
     setSelectedArtifact(null);
     setSkillGapResults(null);
-    setSkillGapConfirmIdx(null);
+    setStoryBuilderOpen(false);
+    setStoryBuilderContext(null);
 
     try {
       // Find existing application or create one
@@ -1015,7 +1019,6 @@ export default function AgentsPage() {
     if (!workspace) return;
     setCheckingSkillGaps(true);
     setSkillGapResults(null);
-    setSkillGapConfirmIdx(null);
     try {
       const result = await apiPost<{ artifact_id: string; requirements: EnrichedRequirement[] }>(
         `/agents/workspaces/${workspace.id}/check-skill-gaps`,
@@ -1029,31 +1032,6 @@ export default function AgentsPage() {
       console.error("Skill gap check failed:", err);
     } finally {
       setCheckingSkillGaps(false);
-    }
-  };
-
-  const handleConfirmSkillGap = async (idx: number, req: EnrichedRequirement) => {
-    if (!skillGapDesc.trim()) return;
-    setSavingSkillGap(true);
-    try {
-      await apiPost("/events/confirm-outlier", {
-        requirement_text: req.text,
-        skill_name: req.text.split(",")[0].trim().slice(0, 80),
-        description: skillGapDesc,
-        company: skillGapCompany || null,
-        repo_url: skillGapRepo || null,
-      });
-      setSkillGapResults((prev) =>
-        prev?.map((r, i) => i === idx ? { ...r, outlier: false, matched_in: "story_bank" } : r) ?? null,
-      );
-      setSkillGapConfirmIdx(null);
-      setSkillGapDesc("");
-      setSkillGapCompany("");
-      setSkillGapRepo("");
-    } catch (err) {
-      console.error("Confirm outlier failed:", err);
-    } finally {
-      setSavingSkillGap(false);
     }
   };
 
@@ -1562,6 +1540,29 @@ export default function AgentsPage() {
         </div>
       )}
     </>
+  );
+
+  const storyBuilderOverlay = storyBuilderOpen && storyBuilderContext && (
+    <StoryBuilderDrawer
+      open={true}
+      onClose={() => {
+        setStoryBuilderOpen(false);
+        setStoryBuilderContext(null);
+      }}
+      requirementText={storyBuilderContext.requirementText}
+      skillName={storyBuilderContext.skillName}
+      onSaved={(resp: StoryBuilderSaveResponse) => {
+        setSkillGapResults((prev) =>
+          prev?.map((r, i) =>
+            i === storyBuilderContext.skillGapIdx
+              ? { ...r, outlier: false, matched_in: "story_bank" }
+              : r
+          ) ?? null,
+        );
+        setStoryBuilderOpen(false);
+        setStoryBuilderContext(null);
+      }}
+    />
   );
 
   if (viewMode === "workspace") {
@@ -2246,69 +2247,23 @@ export default function AgentsPage() {
                               {req.matched_in === "story_bank" ? "Story Bank" : "Profile"}
                             </span>
                           )}
-                          {req.outlier && skillGapConfirmIdx !== idx && (
+                          {req.outlier && (
                             <button
                               onClick={() => {
-                                setSkillGapConfirmIdx(idx);
-                                setSkillGapDesc("");
-                                setSkillGapCompany("");
-                                setSkillGapRepo("");
+                                setStoryBuilderContext({
+                                  requirementText: req.text,
+                                  skillName: req.text.split(",")[0].trim().slice(0, 80),
+                                  skillGapIdx: idx,
+                                });
+                                setStoryBuilderOpen(true);
                               }}
                               className="shrink-0 inline-flex items-center gap-1 rounded-md border border-orange-300 px-2 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
                             >
                               <BookPlus className="h-3 w-3" />
-                              I have this
+                              Build Story
                             </button>
                           )}
                         </div>
-                        {skillGapConfirmIdx === idx && req.outlier && (
-                          <div className="ml-6 mt-2 rounded-lg border border-orange-200 bg-orange-50/50 p-3 dark:border-orange-800 dark:bg-orange-950/20">
-                            <p className="text-xs font-medium mb-2">Describe your experience:</p>
-                            <textarea
-                              value={skillGapDesc}
-                              onChange={(e) => setSkillGapDesc(e.target.value)}
-                              placeholder="e.g., I operationalized this at Acme — set it up, managed onboarding..."
-                              rows={3}
-                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground"
-                            />
-                            <div className="mt-2 grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[10px] font-medium text-muted-foreground">Company (optional)</label>
-                                <input
-                                  type="text"
-                                  value={skillGapCompany}
-                                  onChange={(e) => setSkillGapCompany(e.target.value)}
-                                  className="mt-0.5 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[10px] font-medium text-muted-foreground">Repo / Portfolio URL (optional)</label>
-                                <input
-                                  type="text"
-                                  value={skillGapRepo}
-                                  onChange={(e) => setSkillGapRepo(e.target.value)}
-                                  className="mt-0.5 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
-                                />
-                              </div>
-                            </div>
-                            <div className="mt-2 flex items-center gap-2">
-                              <button
-                                onClick={() => handleConfirmSkillGap(idx, req)}
-                                disabled={savingSkillGap || !skillGapDesc.trim()}
-                                className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                              >
-                                {savingSkillGap ? <Loader2 className="h-3 w-3 animate-spin" /> : <BookPlus className="h-3 w-3" />}
-                                Save to Story Bank
-                              </button>
-                              <button
-                                onClick={() => setSkillGapConfirmIdx(null)}
-                                className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
-                              >
-                                Skip
-                              </button>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -3542,6 +3497,7 @@ export default function AgentsPage() {
         )}
       </div>
       {resumeChatOverlays}
+      {storyBuilderOverlay}
       </>
     );
   }
@@ -3757,6 +3713,7 @@ export default function AgentsPage() {
         </div>
       </div>
       {resumeChatOverlays}
+      {storyBuilderOverlay}
     </div>
   );
 }

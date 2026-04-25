@@ -27,6 +27,7 @@ AGENT_SLUGS = {
     "talking_points": "talking-points-system",
     "experience_enhancer": "experience-enhancer-system",
     "story_interviewer": "story-interviewer-system",
+    "story_builder": "story-builder-system",
     "ageism_shield": "ageism-shield-system",
     "achievement_amplifier": "achievement-amplifier-system",
     "ats_predictor": "ats-predictor-system",
@@ -166,6 +167,36 @@ DEFAULT_PROMPTS = {
         "- Keep the Problem-Solved-Deployed structure\n"
         "- Be direct and conversational, not formal\n"
         "- Use markdown formatting"
+    ),
+    "story_builder": (
+        "You are the Story Builder for CareerLens. You interview a job seeker about a specific "
+        "skill or experience drawn from a job description requirement they claim to have, then "
+        "produce a high-quality Story Bank entry.\n\n"
+        "## YOUR APPROACH\n\n"
+        "Ask ONE targeted question at a time. Keep it conversational and direct -- like a sharp "
+        "colleague helping them prep. Typical interview is 3-5 exchanges.\n\n"
+        "Questions should probe for:\n"
+        "1. **The Situation** -- What was the problem, gap, or challenge? Make it concrete.\n"
+        "2. **Their Approach** -- What judgment calls did they make? Why that approach over alternatives?\n"
+        "3. **The Evidence** -- Numbers, outcomes, adoption, cultural shifts. Press for specifics.\n"
+        "4. **The Takeaway** -- What's the one thing an interviewer should remember?\n\n"
+        "## RULES\n\n"
+        "- NEVER invent facts the user has not confirmed.\n"
+        "- Preserve the user's authentic voice -- don't over-polish into corporate speak.\n"
+        "- If a claim is vague ('improved performance', 'led a team'), ask for specifics.\n"
+        "- If the user gives enough detail, move to the next area instead of over-probing.\n\n"
+        "## WHEN YOU HAVE ENOUGH\n\n"
+        "After gathering sufficient detail (usually 3-5 exchanges), produce the structured story. "
+        "Wrap each section in these exact tags:\n\n"
+        "===RESUME_BULLET===\nA concise resume bullet point\n===END_RESUME_BULLET===\n\n"
+        "===STORY_TITLE===\nA memorable 3-6 word title\n===END_STORY_TITLE===\n\n"
+        "===PROBLEM===\nThe Hook (2-3 sentences)\n===END_PROBLEM===\n\n"
+        "===SOLVED===\nThe Differentiator (2-3 sentences)\n===END_SOLVED===\n\n"
+        "===DEPLOYED===\nThe Proof (2-3 sentences)\n===END_DEPLOYED===\n\n"
+        "===TAKEAWAY===\nOne sentence the interviewer writes in their notes\n===END_TAKEAWAY===\n\n"
+        "===TRIGGER_KEYWORDS===\nComma-separated lowercase keywords\n===END_TRIGGER_KEYWORDS===\n\n"
+        "===PROOF_METRIC===\nThe single most compelling metric\n===END_PROOF_METRIC===\n\n"
+        "After the tags, add a brief note asking the user to review and confirm or request changes."
     ),
     "ageism_shield": (
         "You are the Ageism Shield, a specialized resume rewriting expert for CareerLens.\n\n"
@@ -682,6 +713,63 @@ async def generate_story_assist(
     except Exception as e:
         safe_error = sanitize_ai_error(e)
         logger.error("AI provider error for story_interviewer: %s", str(e))
+        return safe_error.message
+
+
+async def generate_story_builder_chat(
+    db: AsyncSession,
+    requirement_text: str,
+    skill_name: str,
+    message: str | None = None,
+    conversation_history: list[tuple[str, str]] | None = None,
+) -> str:
+    """Run the Story Builder AI interview for creating new Story Bank entries."""
+    slug = AGENT_SLUGS["story_builder"]
+    fallback = DEFAULT_PROMPTS["story_builder"]
+
+    system_prompt = await get_prompt(db, slug, fallback)
+    temperature, max_tokens, model_tier = await get_prompt_config(db, slug)
+
+    context = (
+        f"## Job Description Requirement\n{requirement_text}\n\n"
+        f"## Skill Being Addressed\n{skill_name}"
+    )
+
+    prompt_parts = [context]
+
+    if conversation_history:
+        history_lines = []
+        for role, content in conversation_history[-10:]:
+            if role == "user":
+                history_lines.append(f"User: {content}")
+            else:
+                history_lines.append(f"Assistant: {content}")
+        prompt_parts.append("Previous conversation:\n" + "\n".join(history_lines))
+
+    if message:
+        prompt_parts.append(f"User message: {sanitize_prompt_input(message)}")
+    else:
+        prompt_parts.append(
+            "Begin the interview. Introduce yourself briefly and ask your first "
+            "targeted question about the user's experience with this skill."
+        )
+
+    user_prompt = "\n\n".join(prompt_parts)
+
+    try:
+        provider = get_ai_provider()
+        model = get_model_for_tier(model_tier)
+        raw_response = await provider.complete(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return validate_agent_output(raw_response)
+    except Exception as e:
+        safe_error = sanitize_ai_error(e)
+        logger.error("AI provider error for story_builder: %s", str(e))
         return safe_error.message
 
 

@@ -26,6 +26,11 @@ from app.schemas.event import (
     OutlierCheckResponse,
     OutlierConfirmRequest,
     OutlierConfirmResponse,
+    StoryBuilderChatRequest,
+    StoryBuilderChatResponse,
+    StoryBuilderSaveRequest,
+    StoryBuilderSaveResponse,
+    StoryBuilderStructuredStory,
 )
 from app.services.command_center import aggregate_prep, create_from_note
 from app.services.note_parser import parse_note
@@ -369,6 +374,118 @@ async def confirm_outlier_endpoint(
     await db.commit()
 
     return OutlierConfirmResponse(
+        story_id=story.id,
+        story_title=story.story_title,
+    )
+
+
+# ---- Story Builder endpoints -----------------------------------------------
+
+
+def _parse_story_builder_tags(text: str) -> StoryBuilderStructuredStory | None:
+    """Extract structured story fields from ===TAG=== delimited AI output."""
+    tags = {
+        "RESUME_BULLET": "resume_bullet",
+        "STORY_TITLE": "story_title",
+        "PROBLEM": "problem",
+        "SOLVED": "solved",
+        "DEPLOYED": "deployed",
+        "TAKEAWAY": "takeaway",
+        "TRIGGER_KEYWORDS": "trigger_keywords",
+        "PROOF_METRIC": "proof_metric",
+    }
+    fields: dict = {}
+    for tag, field in tags.items():
+        start = f"==={tag}==="
+        end = f"===END_{tag}==="
+        si = text.find(start)
+        ei = text.find(end)
+        if si != -1 and ei != -1:
+            raw = text[si + len(start) : ei].strip()
+            if field == "trigger_keywords":
+                fields[field] = [k.strip() for k in raw.split(",") if k.strip()]
+            else:
+                fields[field] = raw
+
+    if fields.get("problem") and fields.get("solved") and fields.get("deployed"):
+        return StoryBuilderStructuredStory(**fields)
+    return None
+
+
+def _strip_tags(text: str) -> str:
+    """Remove all ===TAG=== blocks from text, leaving only commentary."""
+    import re
+    cleaned = re.sub(r"===\w+===.*?===END_\w+===", "", text, flags=re.DOTALL)
+    return cleaned.strip()
+
+
+@router.post("/story-builder/chat", response_model=StoryBuilderChatResponse)
+async def story_builder_chat(
+    data: StoryBuilderChatRequest,
+    current_user: UserInfo = Depends(require_permission("events", "create")),
+    db: AsyncSession = Depends(get_db),
+):
+    """AI-guided interview to build a new Story Bank entry."""
+    from app.ai.agent_service import generate_story_builder_chat
+
+    history = [(m.role, m.content) for m in data.history]
+
+    raw = await generate_story_builder_chat(
+        db=db,
+        requirement_text=data.requirement_text,
+        skill_name=data.skill_name,
+        message=data.message,
+        conversation_history=history if history else None,
+    )
+
+    structured = _parse_story_builder_tags(raw)
+    if structured:
+        commentary = _strip_tags(raw)
+        return StoryBuilderChatResponse(
+            reply=commentary or "Here's the story I've drafted based on our conversation. Review the preview and save when you're happy with it.",
+            has_structured_story=True,
+            structured_story=structured,
+        )
+
+    return StoryBuilderChatResponse(reply=raw)
+
+
+@router.post("/story-builder/save", response_model=StoryBuilderSaveResponse)
+async def story_builder_save(
+    data: StoryBuilderSaveRequest,
+    current_user: UserInfo = Depends(require_permission("stories", "edit")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save a completed Story Builder interview result to Story Bank."""
+    from app.models.story_bank import StoryBankStory
+
+    user_id = await _get_user_id(db, current_user)
+
+    keywords = data.trigger_keywords or []
+    if data.skill_name:
+        skill_lower = data.skill_name.lower()
+        if skill_lower not in [k.lower() for k in keywords]:
+            keywords.append(skill_lower)
+
+    story = StoryBankStory(
+        user_id=user_id,
+        source_bullet=data.resume_bullet,
+        story_title=data.story_title,
+        problem=data.problem,
+        solved=data.solved,
+        deployed=data.deployed,
+        takeaway=data.takeaway,
+        trigger_keywords=keywords or None,
+        proof_metric=data.proof_metric,
+        source_company=data.source_company,
+        status="active",
+    )
+    db.add(story)
+    await db.flush()
+    await db.refresh(story)
+    await db.commit()
+
+    return StoryBuilderSaveResponse(
         story_id=story.id,
         story_title=story.story_title,
     )

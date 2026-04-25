@@ -132,6 +132,57 @@ class OutlierConfirmResponse(BaseModel):
     message: str = "Experience saved to Story Bank"
 
 
+# ── Story Builder ──────────────────────────────────────────────────────────
+
+
+class StoryBuilderChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class StoryBuilderChatRequest(BaseModel):
+    requirement_text: str
+    skill_name: str = ""
+    message: str | None = None
+    history: list[StoryBuilderChatMessage] = []
+
+
+class StoryBuilderStructuredStory(BaseModel):
+    resume_bullet: str | None = None
+    story_title: str | None = None
+    problem: str | None = None
+    solved: str | None = None
+    deployed: str | None = None
+    takeaway: str | None = None
+    trigger_keywords: list[str] | None = None
+    proof_metric: str | None = None
+
+
+class StoryBuilderChatResponse(BaseModel):
+    reply: str
+    has_structured_story: bool = False
+    structured_story: StoryBuilderStructuredStory | None = None
+
+
+class StoryBuilderSaveRequest(BaseModel):
+    requirement_text: str = ""
+    skill_name: str = ""
+    resume_bullet: str
+    story_title: str
+    problem: str
+    solved: str
+    deployed: str
+    takeaway: str | None = None
+    trigger_keywords: list[str] | None = None
+    proof_metric: str | None = None
+    source_company: str | None = None
+
+
+class StoryBuilderSaveResponse(BaseModel):
+    story_id: uuid.UUID
+    story_title: str
+
+
 class MeetingPrepResponse(BaseModel):
     event: EventOut
     match_analysis: str | None = None
