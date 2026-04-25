@@ -13,8 +13,9 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { ResumeChatDrawer } from "@/components/resume-chat-drawer";
 import { PipelineStageIndicator } from "@/components/pipeline-stage-indicator";
 import { InterviewJournal } from "@/components/interview-journal";
-import { StoryBuilderDrawer } from "@/components/story-builder-drawer";
-import type { ResumeChatAgent, StoryBuilderSaveResponse } from "@/lib/types";
+import { StoryBuilderDrawer, parseGapsFromArtifact } from "@/components/story-builder-drawer";
+import type { ParsedGap } from "@/components/story-builder-drawer";
+import type { ResumeChatAgent } from "@/lib/types";
 import type {
   AgentConversation,
   AgentMessage,
@@ -313,11 +314,7 @@ export default function AgentsPage() {
   const [checkingSkillGaps, setCheckingSkillGaps] = useState(false);
   // Story Builder drawer state
   const [storyBuilderOpen, setStoryBuilderOpen] = useState(false);
-  const [storyBuilderContext, setStoryBuilderContext] = useState<{
-    requirementText: string;
-    skillName: string;
-    skillGapIdx: number;
-  } | null>(null);
+  const [storyBuilderGaps, setStoryBuilderGaps] = useState<ParsedGap[]>([]);
 
   // Auto-Fill modal state
   const [showAutoFillModal, setShowAutoFillModal] = useState(false);
@@ -929,7 +926,7 @@ export default function AgentsPage() {
     setSelectedArtifact(null);
     setSkillGapResults(null);
     setStoryBuilderOpen(false);
-    setStoryBuilderContext(null);
+    setStoryBuilderGaps([]);
 
     try {
       // Find existing application or create one
@@ -1542,25 +1539,17 @@ export default function AgentsPage() {
     </>
   );
 
-  const storyBuilderOverlay = storyBuilderOpen && storyBuilderContext && (
+  const storyBuilderOverlay = storyBuilderOpen && (
     <StoryBuilderDrawer
       open={true}
       onClose={() => {
         setStoryBuilderOpen(false);
-        setStoryBuilderContext(null);
+        setStoryBuilderGaps([]);
       }}
-      requirementText={storyBuilderContext.requirementText}
-      skillName={storyBuilderContext.skillName}
-      onSaved={(resp: StoryBuilderSaveResponse) => {
-        setSkillGapResults((prev) =>
-          prev?.map((r, i) =>
-            i === storyBuilderContext.skillGapIdx
-              ? { ...r, outlier: false, matched_in: "story_bank" }
-              : r
-          ) ?? null,
-        );
+      gaps={storyBuilderGaps.length > 0 ? storyBuilderGaps : undefined}
+      onSaved={() => {
         setStoryBuilderOpen(false);
-        setStoryBuilderContext(null);
+        setStoryBuilderGaps([]);
       }}
     />
   );
@@ -2200,20 +2189,31 @@ export default function AgentsPage() {
                       </span>
                     )}
                   </div>
-                  <button
-                    onClick={checkSkillGaps}
-                    disabled={checkingSkillGaps}
-                    className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    {checkingSkillGaps ? (
-                      <><Loader2 className="h-3 w-3 animate-spin" /> Checking...</>
-                    ) : skillGapResults ? (
-                      <><Zap className="h-3 w-3" /> Re-check</>
-                    ) : (
-                      <><Zap className="h-3 w-3" /> Check Skill Gaps</>
+                  <div className="flex items-center gap-2">
+                    {skillGapResults && skillGapResults.some((r) => r.outlier) && (
+                      <button
+                        onClick={() => setStoryBuilderOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-orange-300 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                      >
+                        <BookPlus className="h-3 w-3" />
+                        Build Story
+                      </button>
                     )}
-                  </button>
+                    <button
+                      onClick={checkSkillGaps}
+                      disabled={checkingSkillGaps}
+                      className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      {checkingSkillGaps ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" /> Checking...</>
+                      ) : skillGapResults ? (
+                        <><Zap className="h-3 w-3" /> Re-check</>
+                      ) : (
+                        <><Zap className="h-3 w-3" /> Check Skill Gaps</>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 {!skillGapResults && !checkingSkillGaps && (
                   <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
@@ -2248,20 +2248,7 @@ export default function AgentsPage() {
                             </span>
                           )}
                           {req.outlier && (
-                            <button
-                              onClick={() => {
-                                setStoryBuilderContext({
-                                  requirementText: req.text,
-                                  skillName: req.text.split(",")[0].trim().slice(0, 80),
-                                  skillGapIdx: idx,
-                                });
-                                setStoryBuilderOpen(true);
-                              }}
-                              className="shrink-0 inline-flex items-center gap-1 rounded-md border border-orange-300 px-2 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
-                            >
-                              <BookPlus className="h-3 w-3" />
-                              Build Story
-                            </button>
+                            <span className="shrink-0 text-[10px] text-orange-600 dark:text-orange-400">Gap</span>
                           )}
                         </div>
                       </div>
@@ -2924,6 +2911,20 @@ export default function AgentsPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {["skill_gap_report", "job_match_analysis"].includes(selectedArtifact.artifact_type) && (
+                      <button
+                        onClick={() => {
+                          const gaps = parseGapsFromArtifact(selectedArtifact.content);
+                          setStoryBuilderGaps(gaps);
+                          setStoryBuilderOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-orange-300 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                        title="Build a story to address skill gaps"
+                      >
+                        <BookPlus className="h-3 w-3" />
+                        Build Story
+                      </button>
+                    )}
                     {workspace && (
                       <>
                         <button

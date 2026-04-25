@@ -15,21 +15,119 @@ import {
   BookPlus,
   CheckCircle2,
   RefreshCw,
+  AlertTriangle,
+  ChevronRight,
 } from "lucide-react";
+
+export interface ParsedGap {
+  title: string;
+  description: string;
+  severity?: string;
+}
+
+export function parseGapsFromArtifact(content: string): ParsedGap[] {
+  const gaps: ParsedGap[] = [];
+  const lines = content.split("\n");
+
+  // Pattern 1: heading with explicit "Gap" keyword + colon (works anywhere)
+  const explicitGapRe = /^#{1,4}\s+.*\bGap\s*\d*\s*[:.]\s*(.+?)(?:\*\*)?$/i;
+
+  // Pattern 2: any ### heading inside a "Gaps" section
+  const subHeadingRe = /^#{3,4}\s+(.+)$/;
+
+  // Section heading that starts a gaps section
+  const gapsSectionRe = /^#{1,2}\s+(?:\d+[.:]\s+)?.*\bGaps?\b/i;
+  const sectionHeadingRe = /^#{1,2}\s+/;
+
+  // Headings to skip inside a gaps section (subsection headers, strategy advice)
+  const skipRe = /\bGaps\s*$/i;
+  const adviceRe = /^#{3,4}\s+(?:\d+[.:]\s+)?(?:Address|Bridge|Target|Leverage|Use|De-Risk)\b/i;
+
+  let inGapsSection = false;
+
+  function inferSeverity(heading: string): string | undefined {
+    if (/🔴|❌|critical|disqualif/i.test(heading)) return "Critical";
+    if (/🟡|⚠️|important|moderate|secondary/iu.test(heading)) return "Important";
+    if (/🟢|nice.to.have|minor|soft/i.test(heading)) return "Nice-to-Have";
+    return undefined;
+  }
+
+  function isGapItem(line: string): boolean {
+    if (skipRe.test(line)) return false;
+    if (adviceRe.test(line)) return false;
+    if (/\bGaps?\s+to\s+Acknowledge/i.test(line)) return false;
+    return true;
+  }
+
+  function extractTitle(raw: string): string {
+    return raw
+      .replace(/^[\s#]+/, "")
+      .replace(/^\d+[.:]\s*/, "")
+      .replace(/^[^\w\s]*\s*/, "") // strip leading emoji
+      .replace(/\*\*/g, "")
+      .replace(/\*([^*]+)\*/g, "$1")
+      .trim();
+  }
+
+  function collectGap(startIdx: number, title: string, heading: string) {
+    const descLines: string[] = [];
+    let severity = inferSeverity(heading);
+
+    for (let j = startIdx + 1; j < lines.length; j++) {
+      if (explicitGapRe.test(lines[j])) break;
+      if (subHeadingRe.test(lines[j]) && inGapsSection) break;
+      if (sectionHeadingRe.test(lines[j])) break;
+      if (/^---\s*$/.test(lines[j])) break;
+      const sevLine = lines[j].trim();
+      if (/^\*\*Severity[:\s]/i.test(sevLine)) {
+        severity = sevLine.replace(/^\*\*Severity[:\s]*\*\*\s*/i, "").trim();
+      }
+      descLines.push(lines[j]);
+    }
+
+    gaps.push({ title, description: descLines.join("\n").trim(), severity });
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (sectionHeadingRe.test(line)) {
+      inGapsSection = gapsSectionRe.test(line);
+    }
+
+    // Pattern 1: explicit "Gap" keyword (any section)
+    const explicitMatch = line.match(explicitGapRe);
+    if (explicitMatch) {
+      const title = extractTitle(explicitMatch[1]);
+      if (title) collectGap(i, title, line);
+      continue;
+    }
+
+    // Pattern 2: any ### heading inside a gaps section
+    if (inGapsSection && subHeadingRe.test(line) && isGapItem(line)) {
+      const title = extractTitle(line);
+      if (title) collectGap(i, title, line);
+    }
+  }
+
+  return gaps;
+}
 
 interface Props {
   open: boolean;
   onClose: () => void;
   requirementText?: string;
   skillName?: string;
-  onSaved: (response: StoryBuilderSaveResponse) => void;
+  gaps?: ParsedGap[];
+  onSaved: (response?: StoryBuilderSaveResponse) => void;
 }
 
 export function StoryBuilderDrawer({
   open,
   onClose,
-  requirementText = "",
-  skillName = "",
+  requirementText: initialRequirementText = "",
+  skillName: initialSkillName = "",
+  gaps,
   onSaved,
 }: Props) {
   const [messages, setMessages] = useState<StoryBuilderMessage[]>([]);
@@ -42,16 +140,23 @@ export function StoryBuilderDrawer({
   const [editingPreview, setEditingPreview] = useState<StoryBuilderPreview | null>(null);
   const [company, setCompany] = useState("");
 
+  const hasGaps = gaps && gaps.length > 0;
+  const [selectedGap, setSelectedGap] = useState<ParsedGap | null>(null);
+  const showGapPicker = hasGaps && !selectedGap;
+
+  const requirementText = selectedGap?.description || initialRequirementText;
+  const skillName = selectedGap?.title || initialSkillName;
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
 
-  const startInterview = useCallback(async () => {
+  const startInterview = useCallback(async (reqText: string, skill: string) => {
     setSending(true);
     setErrorMsg(null);
     try {
       const resp = await apiPost<StoryBuilderChatResponse>(
         "/events/story-builder/chat",
-        { requirement_text: requirementText, skill_name: skillName },
+        { requirement_text: reqText, skill_name: skill },
       );
       setMessages([{ role: "assistant", content: resp.reply }]);
       if (resp.has_structured_story && resp.structured_story) {
@@ -64,25 +169,31 @@ export function StoryBuilderDrawer({
     } finally {
       setSending(false);
     }
-  }, [requirementText, skillName]);
+  }, []);
+
+  const handleSelectGap = useCallback((gap: ParsedGap) => {
+    setSelectedGap(gap);
+    initialized.current = true;
+    void startInterview(gap.description, gap.title);
+  }, [startInterview]);
 
   useEffect(() => {
-    if (open && !initialized.current) {
+    if (open && !initialized.current && !showGapPicker) {
       initialized.current = true;
-      void startInterview();
+      void startInterview(requirementText, skillName);
     }
     if (!open) {
       initialized.current = false;
+      setSelectedGap(null);
       setMessages([]);
       setInput("");
       setPreview(null);
       setEditingPreview(null);
-
       setErrorMsg(null);
       setSuccessMsg(null);
       setCompany("");
     }
-  }, [open, startInterview]);
+  }, [open, startInterview, showGapPicker, requirementText, skillName]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -267,7 +378,7 @@ export function StoryBuilderDrawer({
         </div>
 
         {/* Requirement context */}
-        {requirementText && (
+        {requirementText && !showGapPicker && (
           <div
             className="border-b px-5 py-2 text-xs"
             style={{
@@ -277,14 +388,46 @@ export function StoryBuilderDrawer({
             }}
           >
             <span className="font-medium" style={{ color: "rgb(180,83,9)" }}>
-              JD Requirement:
+              Gap:
             </span>{" "}
-            {requirementText}
+            {skillName || requirementText}
+          </div>
+        )}
+
+        {/* Gap picker */}
+        {showGapPicker && (
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="mx-auto max-w-lg space-y-2">
+              <p className="text-sm font-medium mb-4">Select a gap to build a story for:</p>
+              {gaps.map((gap, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSelectGap(gap)}
+                  className="w-full text-left rounded-lg border p-4 transition-colors hover:bg-accent group"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{gap.title}</p>
+                        {gap.severity && (
+                          <p className="mt-0.5 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                            {gap.severity}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {/* Two-column body: AI Chat (left) + Story Preview (right) */}
-        <div className="flex flex-1 min-h-0">
+        {!showGapPicker && <div className="flex flex-1 min-h-0">
           {/* LEFT: AI Interview Chat */}
           <div
             className="flex flex-1 flex-col"
@@ -303,7 +446,7 @@ export function StoryBuilderDrawer({
                   <p className="font-medium text-red-600">{errorMsg}</p>
                   <button
                     type="button"
-                    onClick={() => { setErrorMsg(null); void startInterview(); }}
+                    onClick={() => { setErrorMsg(null); void startInterview(requirementText, skillName); }}
                     className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-xs font-medium hover:bg-accent"
                   >
                     <RefreshCw className="h-3 w-3" />
@@ -547,7 +690,7 @@ export function StoryBuilderDrawer({
               </div>
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );
