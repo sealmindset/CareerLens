@@ -227,8 +227,20 @@ def _create_provider(name: str) -> AIProvider:
         )
 
 
+_cached_provider: AIProvider | None = None
+
+
 def get_ai_provider() -> AIProvider:
-    """Factory: returns configured AI provider, optionally wrapped with fallback."""
+    """Factory: returns a cached AI provider singleton.
+
+    The singleton keeps SmartRoutingProvider's _mlx_healthy state alive so that
+    a single failed MLX health-check prevents retries on every call (instead of
+    creating a new provider and retrying the dead connection each time).
+    """
+    global _cached_provider
+    if _cached_provider is not None:
+        return _cached_provider
+
     primary = _create_provider(settings.AI_PROVIDER)
 
     fallback_name = settings.AI_FALLBACK_PROVIDER.strip()
@@ -248,4 +260,5 @@ def get_ai_provider() -> AIProvider:
         except Exception as exc:
             logger.warning("Failed to initialize MLX provider, skipping smart routing: %s", exc)
 
-    return primary
+    _cached_provider = primary
+    return _cached_provider

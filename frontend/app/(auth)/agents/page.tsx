@@ -373,6 +373,7 @@ export default function AgentsPage() {
     setWorkspace(null);
     setSelectedAppId(null);
     setSelectedJob(null);
+    window.history.replaceState({}, '', '/agents');
   }, []);
 
   const refreshJobs = useCallback(async () => {
@@ -767,13 +768,12 @@ export default function AgentsPage() {
     }
   }, [viewMode, jobListings.length]);
 
-  // Auto-load workspace when navigated from Job Listings with ?job=id
+  // Auto-load workspace when navigated with ?job=id (from Job Listings or page refresh)
   useEffect(() => {
     if (autoLoadJobId && jobListings.length > 0 && !workspace) {
       const job = jobListings.find((j) => j.id === autoLoadJobId);
       if (job) {
         setAutoLoadJobId(null);
-        window.history.replaceState({}, '', '/agents');
         loadWorkspace(job);
       }
     }
@@ -928,6 +928,9 @@ export default function AgentsPage() {
     setStoryBuilderOpen(false);
     setStoryBuilderGaps([]);
 
+    // Persist job in URL so page refresh restores the workspace
+    window.history.replaceState({}, '', `/agents?job=${job.id}`);
+
     try {
       // Find existing application or create one
       let app = applications.find((a) => a.job_listing_id === job.id);
@@ -995,19 +998,21 @@ export default function AgentsPage() {
         body,
       );
       setTaskResult(result);
-
-      // Refresh workspace to get new artifacts
-      const ws = await apiGet<AgentWorkspace>(`/agents/workspaces/${workspace.id}`);
-      setWorkspace(ws);
-
-      // Refresh preflights
-      if (selectedAppId) {
-        const pf = await apiGet<PreflightResult[]>(`/agents/preflight/all/${selectedAppId}`);
-        setPreflights(pf);
-      }
     } catch (err) {
       console.error("Agent run failed:", err);
     } finally {
+      // Always refresh workspace — the backend may have completed even if
+      // the proxy timed out or the request errored client-side.
+      try {
+        const ws = await apiGet<AgentWorkspace>(`/agents/workspaces/${workspace.id}`);
+        setWorkspace(ws);
+        if (selectedAppId) {
+          const pf = await apiGet<PreflightResult[]>(`/agents/preflight/all/${selectedAppId}`);
+          setPreflights(pf);
+        }
+      } catch {
+        // workspace refresh failed — leave current state
+      }
       setRunningAgent(null);
     }
   };

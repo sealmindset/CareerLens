@@ -77,6 +77,14 @@ preflight() {
         fi
         ok "Generated JWT_SECRET"
     fi
+
+    # Source .env so its values override any shell-injected env vars (e.g.
+    # Claude Code's apiKeyHelper sets ANTHROPIC_API_KEY to a dummy token).
+    set -a
+    # shellcheck disable=SC1091
+    source .env 2>/dev/null || true
+    set +a
+    ok ".env exported into shell"
 }
 
 # — Commands ————————————————————————————————————————————————————————————————————
