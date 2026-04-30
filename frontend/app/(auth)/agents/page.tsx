@@ -821,12 +821,12 @@ export default function AgentsPage() {
     if (!activeAgent) return;
     try {
       const convo = await apiPost<AgentConversation>(
-        `/agents/${activeAgent.name.toLowerCase()}/conversations`,
+        `/agents/${activeAgent.key}/conversations`,
         { context_type: "general" },
       );
       setActiveConversation(convo);
       setMessages([]);
-      await fetchConversations(activeAgent.name);
+      await fetchConversations(activeAgent.key);
     } catch (err) {
       console.error("Failed to start conversation:", err);
     }

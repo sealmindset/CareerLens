@@ -11,6 +11,10 @@ from app.models.base import Base
 agent_name_enum = sa.Enum(
     "scout", "tailor", "coach", "strategist", "brand_advisor", "coordinator",
     "achievement_amplifier", "interview_prep_coach",
+    "talking_points", "ats_predictor", "hiring_manager_sim",
+    "ninety_day_plan", "outreach_drafter", "auto_fill",
+    "ageism_shield", "overqualification_shield", "interview_verdict",
+    "identity_shield",
     name="agent_name",
     create_type=True,
 )
