@@ -18,6 +18,7 @@ COPY . .
 # BACKEND_INTERNAL_URL must be set at BUILD time because Next.js standalone
 # output bakes rewrites into the server bundle. Changing it at runtime has no effect.
 ENV BACKEND_INTERNAL_URL=http://backend:8000
+ENV NEXT_PUBLIC_SIM_WS_URL=ws://localhost:8400
 
 # Ensure public dir exists (may be empty in scaffold)
 RUN mkdir -p public

@@ -116,6 +116,7 @@ async def callback(
     # Sign JWT
     payload = {
         "sub": user.oidc_subject,
+        "user_id": str(user.id),
         "email": user.email,
         "name": user.display_name,
         "role_id": str(user.role_id),

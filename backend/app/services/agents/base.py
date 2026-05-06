@@ -33,6 +33,7 @@ CONTEXT_NEEDS: dict[str, str] = {
     "scout": "summary",
     "ats_predictor": "summary",
     "hiring_manager_sim": "summary",
+    "cover_letter": "full",
     "strategist": "summary",
     "brand_advisor": "summary",
     "ninety_day_plan": "summary",

@@ -1,5 +1,38 @@
 # Changelog
 
+## [Unreleased] - 2026-05-05
+
+### Added — Voice Interview Simulator (Phase 1 MVP)
+- **New Docker container: `interview-simulator`** (FastAPI, port 8400) — own-container voice-driven interview practice service with WebSocket real-time session handling, REST API for CRUD, and communication quality evaluation
+- **New Docker container: `kokoro-tts`** (Kokoro-82M, port 8401) — local zero-cost text-to-speech via OpenAI-compatible API (`ghcr.io/remsky/kokoro-fastapi:v0.2.1-cpu`), with per-interview-style voice selection (af_bella/af_heart/am_adam)
+- **AI evaluation engine** — Gemma 4 26B MoE (gemma4:26b) via Ollama as primary zero-cost AI for question generation, response evaluation, and debrief generation; Anthropic/OpenAI as paid fallback. MoE architecture (~9B active params) for fast inference. Auto-pulls model on first start
+- **Communication scoring** — hybrid rule-based + AI evaluation: filler word detection (14 patterns), pace WPM, silence gap tracking, trailing-off detection, confidence signal analysis, STAR structure scoring
+- **Nudge/interrupt system** — detects stalling (silence >5s, filler spikes, trailing off, rambling >120s) and prompts interviewee via TTS with contextual nudges
+- **Debrief generator** — produces scored debrief (0-100 on clarity, specificity, confidence, structure, conciseness) with markdown sections: What Landed, What Missed, Portfolio Gaps, Improvement Plan
+- **Database schema** — 4 new tables: `interview_sim_sessions`, `interview_sim_questions`, `interview_sim_responses`, `interview_sim_debriefs` with UUID primary keys and bigserial api_id per convention
+- **Frontend page: `/interview-simulator`** — session list, setup form (job/company/style/interviewer context), live interview view with real-time transcript, and debrief scorecard with per-question breakdown
+- **Frontend hooks** — `useSpeechRecognition` (Web Speech API STT wrapper with silence detection), `useInterviewWs` (WebSocket session manager), `useAudioPlayer` (Kokoro TTS playback with browser speechSynthesis fallback)
+- **Sidebar navigation** — added "Interview Simulator" link with Mic icon
+- **Next.js proxy rewrite** — `/api/sim/*` routes to interview-simulator container
+- **New Docker container: `whisper-stt`** (faster-whisper-large-v3, port 8402) — server-side STT fallback for non-Chrome browsers via OpenAI-compatible transcription API. Records audio via MediaRecorder, sends chunks every 5s
+- **Frontend hook: `useWhisperStt`** — MediaRecorder → server transcription fallback with automatic STT provider selection (Web Speech API → Whisper → manual)
+- **Optional audio recording** — MediaRecorder API for local browser-side self-review (IndexedDB, auto-purge 7 days)
+
+### Added — Infrastructure Scaffolding
+- **Terraform modules** — scaffolded `main.tf`, `variables.tf`, `outputs.tf` with modules for AKS, ACR, PostgreSQL Flexible Server, Key Vault, and Virtual Network (Azure)
+- **CI/CD pipeline** — `.github/workflows/ci.yml` with test (backend, simulator, frontend), build (Docker images to ACR), and deploy (AKS) jobs
+- **Environment config** — added `INTERVIEW_SIM_AI_PROVIDER`, `INTERVIEW_SIM_OLLAMA_MODEL`, `OLLAMA_AUTO_PULL`, `KOKORO_TTS_ENABLED` to `.env`
+
+### Fixed
+- **MLX provider singleton** — `get_ai_provider()` now returns a cached singleton, preventing repeated MLX connection timeouts from creating new provider instances on every AI call
+- **Frontend workspace refresh** — moved workspace refresh after agent run to `finally` block so it executes even on proxy timeout or client-side error
+- **Page refresh losing workspace** — preserved `?job=id` URL parameter on page load; set it in `loadWorkspace`, cleared it in `backToJobPicker`
+
+### Documentation
+- **Implementation spec** — `docs/INTERVIEW-SIMULATOR-SPEC.md` with full architecture, data flow, schema, AI evaluation engine, voice stack, frontend components, integration points, Terraform/CICD plan, and 4-phase roadmap
+- **Voice Architecture Spec** — `docs/VOICE-ARCHITECTURE-SPEC.md` — comprehensive implementation plan for ARIA-inspired immersive voice experience: 6-layer echo cancellation, Voice Activity Detection (VAD), SpeechDirector (sentence-level TTS queue with interrupts), TurnTakingCoordinator (auto turn detection), InterruptHandler (volume + keyword detection), UnifiedSTT (Web Speech + Whisper auto-fallback), Self-Healing TTS (health monitoring + recovery), hardware echo cancellation constraints. Defines 7 new React hooks, 2 UI modes (manual + hands-free), backend WebSocket extensions, and phased implementation order. Based on architectural review of the ARIA project (`/Users/rvance/Documents/GitHub/aria`)
+- **Interviewer Persona & Candidate Memory Spec** — `docs/INTERVIEWER-PERSONA-AND-CANDIDATE-MEMORY-SPEC.md` — two-part implementation plan inspired by `ai-shared-brain` SOUL.md + MEMORY.md pattern: (A) Interviewer Persona System with named characters (Sarah Chen behavioral, David Park technical, Alex Rivera conversational), each with personality traits, questioning strategy, nudge voice, and communication style stored as managed prompts, injected into question generation, nudge engine, and debrief generation; (B) Cross-Session Candidate Memory with new `interview_sim_candidate_memory` table tracking rolling averages, score trends, stall triggers, filler hotspots, and AI-curated coaching summary that evolves across sessions to personalize difficulty calibration, adaptive nudge timing, and longitudinal progress tracking. ~8 day estimated effort across 11 phases
+
 ## [Unreleased] - 2026-04-23
 
 ### Security

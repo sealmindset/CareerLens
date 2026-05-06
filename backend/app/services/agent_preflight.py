@@ -179,10 +179,16 @@ AGENT_REQUIREMENTS = {
         "optional": ["tailored_resume"],
         "next_agent": "strategist",
     },
+    "cover_letter": {
+        "description": "Crafts problem-first cover letter variations targeting different company needs",
+        "required": ["profile_full", "job_listing"],
+        "optional": ["tailored_resume"],
+        "next_agent": "strategist",
+    },
     "strategist": {
-        "description": "Generates cover letters and application strategies",
+        "description": "Develops application strategies with timing and follow-up plans",
         "required": ["profile_basic", "job_listing"],
-        "optional": ["tailored_resume", "job_match_analysis"],
+        "optional": ["tailored_resume", "job_match_analysis", "cover_letter"],
         "next_agent": "brand_advisor",
     },
     "brand_advisor": {
@@ -228,6 +234,16 @@ AGENT_REQUIREMENTS = {
         "description": "Stage-aware pre-interview prep: brief, flashcards, STAR drafts, and a mock-interview chat -- drawn from your Interview Question Bank, Story Bank, and profile",
         "required": ["profile_basic", "job_listing"],
         "optional": [],
+        "next_agent": None,
+    },
+    "interview_simulator": {
+        "description": "Voice interview practice with AI scoring and workspace-aware debriefs",
+        "required": ["profile_basic", "job_listing"],
+        "optional": [
+            "skill_gap_report", "hiring_manager_review",
+            "interview_prep_brief", "interview_star_drafts",
+            "tailored_resume",
+        ],
         "next_agent": None,
     },
 }

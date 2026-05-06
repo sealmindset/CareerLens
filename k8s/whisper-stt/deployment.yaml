@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whisper-stt
+  namespace: careerlens
+  labels:
+    app: whisper-stt
+    component: stt
+    part-of: careerlens
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: whisper-stt
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: whisper-stt
+        component: stt
+        part-of: careerlens
+    spec:
+      containers:
+        - name: whisper-stt
+          image: fedirz/faster-whisper-server:latest-cpu
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          env:
+            - name: WHISPER__MODEL
+              value: "Systran/faster-distil-whisper-small.en"
+            - name: WHISPER__INFERENCE_DEVICE
+              value: "cpu"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

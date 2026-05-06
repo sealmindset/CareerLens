@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kokoro-tts
+  namespace: careerlens
+  labels:
+    app: kokoro-tts
+    component: tts
+    part-of: careerlens
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kokoro-tts
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: kokoro-tts
+        component: tts
+        part-of: careerlens
+    spec:
+      containers:
+        - name: kokoro-tts
+          image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+          ports:
+            - containerPort: 8880
+              protocol: TCP
+          env:
+            - name: KOKORO_THREADS
+              value: "4"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8880
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8880
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

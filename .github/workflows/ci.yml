@@ -1,0 +1,195 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Test jobs — run in parallel
+  # ---------------------------------------------------------------------------
+
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: career-lens
+          POSTGRES_USER: career-lens
+          POSTGRES_PASSWORD: career-lens
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-backend-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-backend-
+
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt pytest pytest-asyncio pytest-mock httpx
+
+      - name: Run backend tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://career-lens:career-lens@localhost:5432/career-lens
+        run: cd backend && python -m pytest tests/ -v --tb=short
+
+  test-simulator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-simulator-${{ hashFiles('interview-simulator/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-simulator-
+
+      - name: Install simulator deps
+        run: pip install -r interview-simulator/requirements.txt pytest pytest-asyncio pytest-mock
+
+      - name: Run simulator tests
+        run: cd interview-simulator && python -m pytest tests/ -v --tb=short
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Cache npm packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: Lint
+        run: cd frontend && npm run lint
+
+      - name: Build
+        run: cd frontend && npm run build
+
+  # ---------------------------------------------------------------------------
+  # Build and push Docker images to ACR
+  # ---------------------------------------------------------------------------
+
+  build-and-push:
+    needs: [test-backend, test-simulator, test-frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - name: frontend
+            context: ./frontend
+          - name: backend
+            context: ./backend
+          - name: interview-simulator
+            context: ./interview-simulator
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - uses: azure/docker-login@v2
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push ${{ matrix.service.name }}
+        run: |
+          IMAGE="${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service.name }}"
+          TAG="${{ github.sha }}"
+          docker build \
+            -t "${IMAGE}:${TAG}" \
+            -t "${IMAGE}:latest" \
+            ${{ matrix.service.context }}
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:latest"
+
+  # ---------------------------------------------------------------------------
+  # Deploy to AKS
+  # ---------------------------------------------------------------------------
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - uses: azure/aks-set-context@v3
+        with:
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/configmap.yaml
+          kubectl apply -f k8s/ingress.yaml
+          kubectl apply -f k8s/interview-simulator/
+          kubectl apply -f k8s/kokoro-tts/
+          kubectl apply -f k8s/whisper-stt/
+
+      - name: Update container images
+        run: |
+          TAG="${{ github.sha }}"
+          ACR="${{ secrets.ACR_LOGIN_SERVER }}"
+
+          kubectl set image deployment/frontend \
+            frontend="${ACR}/frontend:${TAG}" \
+            -n careerlens
+
+          kubectl set image deployment/backend \
+            backend="${ACR}/backend:${TAG}" \
+            -n careerlens
+
+          kubectl set image deployment/interview-simulator \
+            interview-simulator="${ACR}/interview-simulator:${TAG}" \
+            -n careerlens
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/frontend -n careerlens --timeout=120s
+          kubectl rollout status deployment/backend -n careerlens --timeout=120s
+          kubectl rollout status deployment/interview-simulator -n careerlens --timeout=180s

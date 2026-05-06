@@ -2,8 +2,8 @@
 
 Runs agents in sequence, each building on the previous agent's output.
 Two pipeline types:
-- "full": Scout → Tailor → Coach → Talking Points → Strategist → Brand Advisor → Coordinator
-- "quick": Scout → Tailor → Talking Points → Strategist (essentials only)
+- "full": Scout → Tailor → Amplifier → ATS → HM Sim → Coach → Talking Points → Cover Letter → Strategist → Brand Advisor → 90-Day → Outreach → Coordinator
+- "quick": Scout → Tailor → Amplifier → ATS → HM Sim → Talking Points → Strategist (essentials only)
 """
 
 import logging
@@ -26,7 +26,7 @@ PIPELINE_SEQUENCES = {
     "full": [
         "scout", "tailor",
         "achievement_amplifier", "ats_predictor", "hiring_manager_sim",
-        "coach", "talking_points", "strategist", "brand_advisor",
+        "coach", "talking_points", "cover_letter", "strategist", "brand_advisor",
         "ninety_day_plan", "outreach_drafter", "coordinator",
     ],
     "quick": [

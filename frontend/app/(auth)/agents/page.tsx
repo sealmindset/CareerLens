@@ -87,7 +87,85 @@ import {
   Globe,
   CheckCircle,
   Trash2,
+  PenLine,
+  MicOff,
+  Square,
+  SkipForward,
+  Volume2,
+  Clock,
 } from "lucide-react";
+import { useInterviewWs, type WsQuestion, type WsNudge, type SessionPhase } from "../interview-simulator/hooks/use-interview-ws";
+import { useEchoCancellation } from "../interview-simulator/hooks/use-echo-cancellation";
+import { useVAD } from "../interview-simulator/hooks/use-vad";
+import { useSelfHealingAudio } from "../interview-simulator/hooks/use-self-healing-audio";
+import { useSpeechDirector } from "../interview-simulator/hooks/use-speech-director";
+import { useUnifiedStt } from "../interview-simulator/hooks/use-unified-stt";
+import { useTurnTaking } from "../interview-simulator/hooks/use-turn-taking";
+import { useInterruptHandler } from "../interview-simulator/hooks/use-interrupt-handler";
+
+// Simulator types
+interface SimSession {
+  id: string;
+  application_id: string | null;
+  job_title: string;
+  company: string;
+  interview_style: string;
+  status: string;
+  question_count: number;
+  overall_score: Record<string, number> | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+interface SimSessionDetail extends SimSession {
+  job_description: string | null;
+  interviewer_context: string | null;
+  questions: SimQuestion[];
+  debrief: SimDebrief | null;
+}
+
+interface SimQuestion {
+  id: string;
+  question_index: number;
+  question_text: string;
+  question_type: string | null;
+  response: SimResponse | null;
+}
+
+interface SimResponse {
+  id: string;
+  transcript: string;
+  duration_ms: number | null;
+  filler_word_count: number;
+  pace_wpm: number | null;
+  clarity_score: number | null;
+  specificity_score: number | null;
+  confidence_score: number | null;
+  structure_score: number | null;
+  example_quality: string | null;
+  evaluator_notes: string | null;
+  stalled: boolean;
+  was_nudged: boolean;
+}
+
+interface SimDebrief {
+  id: string;
+  session_id: string;
+  overall_score: number | null;
+  clarity_score: number | null;
+  specificity_score: number | null;
+  confidence_score: number | null;
+  structure_score: number | null;
+  conciseness_score: number | null;
+  what_landed: string | null;
+  what_missed: string | null;
+  portfolio_gaps: string | null;
+  improvement_plan: string | null;
+  story_utilization: string | null;
+  gap_correlation: string | null;
+  exported_to_workspace: boolean;
+}
 
 const INTERVIEW_STAGES: { value: string; label: string }[] = [
   { value: "recruiter_screen", label: "Recruiter Screen" },
@@ -120,7 +198,7 @@ const agents: AgentDef[] = [
     name: "Tailor",
     key: "tailor",
     icon: Scissors,
-    description: "Rewrites your resume and cover letter to match the job listing language authentically.",
+    description: "Rewrites your resume to match the job listing language authentically.",
     modelTier: "premium",
     color: "rgb(139,92,246)",
   },
@@ -165,10 +243,18 @@ const agents: AgentDef[] = [
     color: "rgb(168,85,247)",
   },
   {
+    name: "Cover Letter",
+    key: "cover_letter",
+    icon: PenLine,
+    description: "Crafts problem-first cover letter variations, each targeting a different company need.",
+    modelTier: "premium",
+    color: "rgb(99,102,241)",
+  },
+  {
     name: "Strategist",
     key: "strategist",
     icon: Target,
-    description: "Generates cover letters and develops application strategies with follow-up plans.",
+    description: "Develops application strategies with timing analysis, follow-up plans, and salary negotiation prep.",
     modelTier: "premium",
     color: "rgb(234,179,8)",
   },
@@ -219,6 +305,14 @@ const agents: AgentDef[] = [
     description: "Analyzes application forms and generates a browser auto-fill script for one-click form filling.",
     modelTier: "premium",
     color: "rgb(14,165,233)",
+  },
+  {
+    name: "Voice Interview",
+    key: "interview_simulator",
+    icon: Mic,
+    description: "Practice interviews with AI voice simulation, real-time scoring, and workspace-aware debriefs.",
+    modelTier: "premium",
+    color: "rgb(168,85,247)",
   },
 ];
 
@@ -335,6 +429,17 @@ export default function AgentsPage() {
   const [activeQuestionIdx, setActiveQuestionIdx] = useState(0);
   const [editingAnswer, setEditingAnswer] = useState("");
   const [chatbotSubmitResult, setChatbotSubmitResult] = useState<ChatbotSubmitResult | null>(null);
+
+  // Interview Simulator modal state
+  const [showSimModal, setShowSimModal] = useState(false);
+  const [simView, setSimView] = useState<"setup" | "live" | "debrief">("setup");
+  const [simSessions, setSimSessions] = useState<SimSession[]>([]);
+  const [simActiveSession, setSimActiveSession] = useState<SimSessionDetail | null>(null);
+  const [simLoading, setSimLoading] = useState(false);
+  const [simError, setSimError] = useState<string | null>(null);
+  const [simStyle, setSimStyle] = useState("behavioral");
+  const [simQuestionCount, setSimQuestionCount] = useState(10);
+  const [simInterviewerContext, setSimInterviewerContext] = useState("");
 
   // Job creation state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -962,7 +1067,7 @@ export default function AgentsPage() {
 
       // Restore persisted skill gap results from latest artifact
       const sgArtifact = ws.artifacts
-        ?.filter((a: WorkspaceArtifact) => a.artifact_type === "skill_gap_check")
+        ?.filter((a: WorkspaceArtifact) => a.artifact_type === "skill_gap_report")
         .sort((a: WorkspaceArtifact, b: WorkspaceArtifact) => b.version - a.version)[0];
       if (sgArtifact) {
         try {
@@ -1060,6 +1165,130 @@ export default function AgentsPage() {
       console.error("Pipeline failed:", err);
     } finally {
       setPipelineRunning(false);
+    }
+  };
+
+  // --- Interview Simulator functions ---
+
+  const buildAgentContext = useCallback(() => {
+    if (!workspace) return null;
+    const latestContent = (type: string) => {
+      const art = workspace.artifacts
+        ?.filter((a: WorkspaceArtifact) => a.artifact_type === type)
+        .sort((a: WorkspaceArtifact, b: WorkspaceArtifact) => b.version - a.version)[0];
+      return art?.content || null;
+    };
+
+    const skillGapRaw = latestContent("skill_gap_report");
+    let skillGaps = null;
+    if (skillGapRaw) {
+      try {
+        skillGaps = typeof skillGapRaw === "string" ? JSON.parse(skillGapRaw) : skillGapRaw;
+      } catch {
+        skillGaps = skillGapRaw;
+      }
+    }
+
+    return {
+      skill_gaps: skillGaps,
+      hiring_manager_review: latestContent("hiring_manager_review"),
+      interview_prep_brief: latestContent("interview_prep_brief"),
+      story_bank_summaries: null,
+      candidate_seniority: null,
+      interview_stage: applications.find((a) => a.id === selectedAppId)?.pipeline_stage || null,
+    };
+  }, [workspace, applications, selectedAppId]);
+
+  const loadSimSessions = useCallback(async () => {
+    if (!selectedAppId) return;
+    try {
+      const all = await apiGet<SimSession[]>("/sim/sessions");
+      setSimSessions(all.filter((s) => s.application_id === selectedAppId));
+    } catch {
+      setSimSessions([]);
+    }
+  }, [selectedAppId]);
+
+  const openSimModal = async () => {
+    if (!selectedJob || !workspace) {
+      setSimError(selectedJob ? "No workspace loaded" : "No job selected");
+      setShowSimModal(true);
+      setSimView("setup");
+      return;
+    }
+    setShowSimModal(true);
+    setSimView("setup");
+    setSimActiveSession(null);
+    setSimError(null);
+    setSimInterviewerContext("");
+    await loadSimSessions();
+  };
+
+  const createSimSession = async () => {
+    if (!selectedJob) return;
+    setSimLoading(true);
+    setSimError(null);
+    try {
+      const agentCtx = buildAgentContext();
+      const session = await apiPost<SimSessionDetail>("/sim/sessions", {
+        application_id: selectedAppId || undefined,
+        job_title: selectedJob.title,
+        company: selectedJob.company,
+        job_description: selectedJob.description || undefined,
+        interviewer_context: simInterviewerContext || undefined,
+        interview_style: simStyle,
+        question_count: simQuestionCount,
+        agent_context: agentCtx || undefined,
+      });
+      const updated = await apiPost<SimSessionDetail>(
+        `/sim/sessions/${session.id}/generate-questions`
+      );
+      setSimActiveSession(updated);
+      setSimView("live");
+    } catch (err: any) {
+      setSimError(err.message || "Failed to create session");
+    } finally {
+      setSimLoading(false);
+    }
+  };
+
+  const onSimComplete = async (sessionId: string) => {
+    try {
+      const detail = await apiGet<SimSessionDetail>(`/sim/sessions/${sessionId}`);
+      setSimActiveSession(detail);
+      setSimView("debrief");
+      if (workspace) {
+        const ws = await apiGet<AgentWorkspace>(`/agents/workspaces/${workspace.id}`);
+        setWorkspace(ws);
+      }
+    } catch {
+      setSimView("debrief");
+    }
+  };
+
+  const closeSimModal = async () => {
+    setShowSimModal(false);
+    setSimActiveSession(null);
+    setSimView("setup");
+    if (workspace) {
+      try {
+        const ws = await apiGet<AgentWorkspace>(`/agents/workspaces/${workspace.id}`);
+        setWorkspace(ws);
+      } catch { /* ignore */ }
+    }
+  };
+
+  const openSimDebrief = async (sessionId: string) => {
+    setSimLoading(true);
+    try {
+      const detail = await apiGet<SimSessionDetail>(`/sim/sessions/${sessionId}`);
+      setSimActiveSession(detail);
+      setSimView("debrief");
+      setShowSimModal(true);
+    } catch (err: any) {
+      setSimError(err.message);
+    } finally {
+      setSimLoading(false);
     }
   };
 
@@ -2528,8 +2757,73 @@ export default function AgentsPage() {
                         </div>
                       )}
 
+                      {/* Interview Simulator: style picker + past sessions */}
+                      {agent.key === "interview_simulator" && (
+                        <div className="mb-2 space-y-2">
+                          <div>
+                            <label className="text-xs font-medium mb-1 block">Interview style</label>
+                            <select
+                              value={simStyle}
+                              onChange={(e) => setSimStyle(e.target.value)}
+                              className="w-full rounded-md border px-2 py-1.5 text-xs"
+                              style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                            >
+                              <option value="behavioral">Behavioral</option>
+                              <option value="technical">Technical</option>
+                              <option value="conversational">Conversational</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium mb-1 block">Questions: {simQuestionCount}</label>
+                            <input
+                              type="range"
+                              min={3}
+                              max={20}
+                              value={simQuestionCount}
+                              onChange={(e) => setSimQuestionCount(Number(e.target.value))}
+                              className="w-full"
+                            />
+                          </div>
+                          {simSessions.filter((s) => s.status === "completed").length > 0 && (
+                            <div>
+                              <div className="text-[10px] font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>
+                                Past Sessions
+                              </div>
+                              {simSessions
+                                .filter((s) => s.status === "completed")
+                                .slice(0, 3)
+                                .map((s) => (
+                                  <button
+                                    key={s.id}
+                                    onClick={() => openSimDebrief(s.id)}
+                                    className="w-full flex items-center justify-between text-[10px] px-2 py-1 rounded hover:bg-accent/50 transition-colors"
+                                  >
+                                    <span className="capitalize">{s.interview_style}</span>
+                                    <span
+                                      className="font-bold"
+                                      style={{ color: (s.overall_score?.overall ?? 0) >= 80 ? "rgb(16,185,129)" : (s.overall_score?.overall ?? 0) >= 60 ? "rgb(234,179,8)" : "rgb(239,68,68)" }}
+                                    >
+                                      {s.overall_score?.overall ?? "—"}/100
+                                    </span>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="flex gap-2">
-                        {agent.key === "auto_fill" ? (
+                        {agent.key === "interview_simulator" ? (
+                          <button
+                            onClick={openSimModal}
+                            disabled={pipelineRunning}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                            style={{ backgroundColor: agent.color, color: "white" }}
+                          >
+                            <Mic className="h-3 w-3" />
+                            Start Simulation
+                          </button>
+                        ) : agent.key === "auto_fill" ? (
                           <button
                             onClick={openAutoFillModal}
                             disabled={pipelineRunning}
@@ -3044,7 +3338,7 @@ export default function AgentsPage() {
                         </div>
                       );
                     })()
-                  ) : selectedArtifact.artifact_type === "skill_gap_check" ? (
+                  ) : selectedArtifact.artifact_type === "skill_gap_report" ? (
                     (() => {
                       let reqs: EnrichedRequirement[] = [];
                       try {
@@ -3502,6 +3796,27 @@ export default function AgentsPage() {
           </div>
         )}
       </div>
+      {/* ─── Interview Simulator Modal ─── */}
+      {showSimModal && (
+        <SimulatorModal
+          simView={simView}
+          simActiveSession={simActiveSession}
+          simLoading={simLoading}
+          simError={simError}
+          simStyle={simStyle}
+          simQuestionCount={simQuestionCount}
+          simInterviewerContext={simInterviewerContext}
+          selectedJob={selectedJob}
+          workspace={workspace}
+          buildAgentContext={buildAgentContext}
+          onSetSimStyle={setSimStyle}
+          onSetSimQuestionCount={setSimQuestionCount}
+          onSetSimInterviewerContext={setSimInterviewerContext}
+          onCreateSession={createSimSession}
+          onSimComplete={onSimComplete}
+          onClose={closeSimModal}
+        />
+      )}
       {resumeChatOverlays}
       {storyBuilderOverlay}
       </>
@@ -3720,6 +4035,848 @@ export default function AgentsPage() {
       </div>
       {resumeChatOverlays}
       {storyBuilderOverlay}
+    </div>
+  );
+}
+
+
+// ============================================================================
+// SIMULATOR MODAL COMPONENT
+// ============================================================================
+
+function SimulatorModal({
+  simView,
+  simActiveSession,
+  simLoading,
+  simError,
+  simStyle,
+  simQuestionCount,
+  simInterviewerContext,
+  selectedJob,
+  workspace,
+  buildAgentContext,
+  onSetSimStyle,
+  onSetSimQuestionCount,
+  onSetSimInterviewerContext,
+  onCreateSession,
+  onSimComplete,
+  onClose,
+}: {
+  simView: "setup" | "live" | "debrief";
+  simActiveSession: SimSessionDetail | null;
+  simLoading: boolean;
+  simError: string | null;
+  simStyle: string;
+  simQuestionCount: number;
+  simInterviewerContext: string;
+  selectedJob: JobListing | null;
+  workspace: AgentWorkspace | null;
+  buildAgentContext: () => Record<string, unknown> | null;
+  onSetSimStyle: (v: string) => void;
+  onSetSimQuestionCount: (v: number) => void;
+  onSetSimInterviewerContext: (v: string) => void;
+  onCreateSession: () => void;
+  onSimComplete: (sessionId: string) => void;
+  onClose: () => void;
+}) {
+  const agentCtx = buildAgentContext();
+  const hasSkillGaps = !!agentCtx?.skill_gaps;
+  const hasHiringReview = !!agentCtx?.hiring_manager_review;
+  const hasPrepBrief = !!agentCtx?.interview_prep_brief;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60" onClick={simView === "live" ? undefined : onClose} />
+      <div
+        className={`relative z-10 flex flex-col rounded-2xl shadow-2xl overflow-hidden ${
+          simView === "live" ? "inset-4 fixed" : "max-w-5xl w-full max-h-[94vh]"
+        }`}
+        style={{ backgroundColor: "var(--background)" }}
+      >
+        {/* Modal header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+          <div>
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <Mic className="h-5 w-5" style={{ color: "rgb(168,85,247)" }} />
+              Voice Interview Simulator
+            </h2>
+            {selectedJob && (
+              <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                {selectedJob.title} at {selectedJob.company}
+              </p>
+            )}
+          </div>
+          {simView !== "live" && (
+            <button onClick={onClose} className="rounded-md p-1.5 transition-colors hover:bg-accent">
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+
+        {/* Modal body */}
+        <div className="flex-1 overflow-y-auto">
+          {simView === "setup" && (
+            <div className="p-6 max-w-2xl mx-auto space-y-6">
+              {simError && (
+                <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle className="h-4 w-4 shrink-0" /> {simError}
+                </div>
+              )}
+
+              {/* Context summary */}
+              <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                <h3 className="text-sm font-bold">Workspace Context</h3>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    {hasSkillGaps ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                    ) : (
+                      <Circle className="h-3.5 w-3.5 text-yellow-500" />
+                    )}
+                    <span>Skill gaps {hasSkillGaps ? "analyzed" : "not yet analyzed"}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {hasHiringReview ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                    ) : (
+                      <Circle className="h-3.5 w-3.5 text-yellow-500" />
+                    )}
+                    <span>Hiring manager review {hasHiringReview ? "available" : "not run"}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {hasPrepBrief ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                    ) : (
+                      <Circle className="h-3.5 w-3.5 text-yellow-500" />
+                    )}
+                    <span>Interview prep {hasPrepBrief ? "briefed" : "not run"}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                    <span>Job description loaded</span>
+                  </div>
+                </div>
+                <p className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+                  Questions will be tailored based on available agent outputs. Run more agents for smarter interviews.
+                </p>
+              </div>
+
+              {/* Settings */}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Interview Style</label>
+                  <select
+                    value={simStyle}
+                    onChange={(e) => onSetSimStyle(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                  >
+                    <option value="behavioral">Behavioral</option>
+                    <option value="technical">Technical</option>
+                    <option value="conversational">Conversational</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Number of Questions: {simQuestionCount}</label>
+                  <input
+                    type="range"
+                    min={3}
+                    max={20}
+                    value={simQuestionCount}
+                    onChange={(e) => onSetSimQuestionCount(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Interviewer Context (optional)</label>
+                  <textarea
+                    value={simInterviewerContext}
+                    onChange={(e) => onSetSimInterviewerContext(e.target.value)}
+                    rows={3}
+                    placeholder="E.g., hiring manager with 10+ years in distributed systems, focused on system design..."
+                    className="w-full rounded-lg border px-3 py-2 text-sm resize-none"
+                    style={{ backgroundColor: "var(--background)", borderColor: "var(--border)" }}
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={onCreateSession}
+                disabled={simLoading}
+                className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-white transition-colors disabled:opacity-50"
+                style={{ backgroundColor: "rgb(168,85,247)" }}
+              >
+                {simLoading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Creating session &amp; generating questions...</>
+                ) : (
+                  <><Play className="h-4 w-4" /> Start Interview</>
+                )}
+              </button>
+            </div>
+          )}
+
+          {simView === "live" && simActiveSession && (
+            <SimLiveInterview
+              session={simActiveSession}
+              onComplete={onSimComplete}
+              onClose={onClose}
+            />
+          )}
+
+          {simView === "debrief" && simActiveSession && (
+            <SimDebriefView session={simActiveSession} onClose={onClose} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ============================================================================
+// SIMULATOR LIVE INTERVIEW (INSIDE MODAL)
+// ============================================================================
+
+function SimLiveInterview({
+  session,
+  onComplete,
+  onClose,
+}: {
+  session: SimSessionDetail;
+  onComplete: (sessionId: string) => void;
+  onClose: () => void;
+}) {
+  const [currentQuestion, setCurrentQuestion] = useState<WsQuestion | null>(null);
+  const [interimText, setInterimText] = useState("");
+  const [transcriptLog, setTranscriptLog] = useState<Array<{ role: string; text: string }>>([]);
+  const [isResponding, setIsResponding] = useState(false);
+  const [nudge, setNudge] = useState<string | null>(null);
+  const [handsFree, setHandsFree] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("interview-hands-free") === "true";
+  });
+  const [textFallback, setTextFallback] = useState<string | null>(null);
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
+
+  const echo = useEchoCancellation("webspeech");
+  const vad = useVAD({
+    onSpeechStart: () => {
+      turnTaking.onSpeechStart();
+      ws.send({ type: "vad_event", event: "speech_start", timestamp_ms: Date.now() });
+    },
+    onSpeechEnd: (durationMs) => {
+      turnTaking.onSpeechEnd();
+      ws.send({ type: "vad_event", event: "speech_end", timestamp_ms: Date.now(), duration_ms: durationMs });
+    },
+  });
+  const audio = useSelfHealingAudio(
+    { setIsSpeaking: echo.setIsSpeaking, setLastSpokenText: echo.setLastSpokenText },
+    (text) => setTextFallback(text),
+  );
+  const director = useSpeechDirector({
+    setIsSpeaking: echo.setIsSpeaking,
+    setLastSpokenText: echo.setLastSpokenText,
+    setRecordingStartTime: echo.setRecordingStartTime,
+  });
+  const stt = useUnifiedStt({
+    echoFilter: echo.shouldDiscardTranscript,
+    onInterim: (text, confidence) => {
+      setInterimText(text);
+      ws.sendTranscriptInterim(text, confidence);
+      interrupt.checkTranscript(text, director.isPlaying);
+    },
+    onFinal: (text, confidence) => {
+      setInterimText("");
+      ws.sendTranscriptFinal(text, confidence);
+      setTranscriptLog((prev) => [...prev, { role: "candidate", text }]);
+      turnTaking.onTranscriptChunk(text);
+    },
+    onSilence: (durationMs) => {
+      ws.sendSilenceDetected(durationMs);
+    },
+    onProviderSwitch: (from, to, reason) => {
+      console.log(`STT switched from ${from} to ${to}: ${reason}`);
+    },
+  });
+  const turnTaking = useTurnTaking({
+    mode: handsFree ? "hands-free" : "manual",
+    onTurnComplete: (transcript) => {
+      if (handsFree && transcript.trim()) {
+        ws.sendResponseComplete();
+      }
+    },
+    onInterrupt: () => {
+      if (director.isPlaying) {
+        const result = director.interrupt();
+        ws.send({ type: "interrupt", spoken_text: result?.spokenText || "", remaining_text: result?.remainingText || "" });
+      }
+    },
+  });
+  const interrupt = useInterruptHandler({
+    onInterrupt: () => {
+      if (director.isPlaying) {
+        const result = director.interrupt();
+        ws.send({ type: "interrupt", spoken_text: result?.spokenText || "", remaining_text: result?.remainingText || "" });
+        turnTaking.setInterviewerSpeaking(false);
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (vad.isActive && director.isPlaying) {
+      interrupt.checkAudioLevel(vad.audioLevel, true);
+    }
+  }, [vad.audioLevel, vad.isActive, director.isPlaying]);
+
+  const [token, setToken] = useState("");
+  useEffect(() => {
+    apiGet<{ token: string }>("/sim/sessions/ws-token")
+      .then((res) => setToken(res.token))
+      .catch(() => console.error("Failed to fetch WS token"));
+  }, []);
+
+  const ws = useInterviewWs({
+    sessionId: session.id,
+    token,
+    onQuestion: async (q) => {
+      setCurrentQuestion(q);
+      setNudge(null);
+      setTextFallback(null);
+      setTranscriptLog((prev) => [...prev, { role: "interviewer", text: q.text }]);
+      turnTaking.setInterviewerSpeaking(true);
+      if (q.audio_url) {
+        await director.speak(q.text, q.audio_url);
+      } else {
+        await director.speak(q.text);
+      }
+      turnTaking.setInterviewerSpeaking(false);
+      if (handsFree) {
+        echo.setRecordingStartTime(Date.now());
+        stt.start();
+        setIsResponding(true);
+      }
+    },
+    onNudge: async (n) => {
+      setNudge(n.text);
+      if (n.audio_url) await director.speak(n.text, n.audio_url);
+      else await director.speak(n.text);
+    },
+    onEvalPartial: () => {},
+    onComplete: () => {
+      vad.stop();
+      stt.stop();
+      onComplete(session.id);
+    },
+    onError: (msg) => { console.error("Interview error:", msg); },
+  });
+
+  const sttAvailable = stt.mode !== "none";
+
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcriptLog, interimText]);
+
+  useEffect(() => {
+    if (token) { ws.connect(); vad.start(); }
+    return () => { vad.stop(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const startResponding = () => { setIsResponding(true); echo.setRecordingStartTime(Date.now()); stt.start(); };
+  const finishResponding = () => { stt.stop(); setIsResponding(false); setInterimText(""); ws.sendResponseComplete(); };
+  const skipQuestion = () => { stt.stop(); director.stop(); setIsResponding(false); setInterimText(""); ws.sendSkipQuestion(); };
+  const endSession = () => { stt.stop(); vad.stop(); director.stop(); setIsResponding(false); ws.sendEndSession(); };
+  const toggleHandsFree = () => { const next = !handsFree; setHandsFree(next); localStorage.setItem("interview-hands-free", String(next)); };
+
+  const progress = currentQuestion ? (currentQuestion.index / currentQuestion.total) * 100 : 0;
+  const audioLevelPct = Math.max(0, Math.min(100, ((vad.audioLevel + 60) / 60) * 100));
+
+  return (
+    <div className="p-6 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold">{session.job_title} at {session.company}</h2>
+          <div className="flex items-center gap-3 text-xs" style={{ color: "var(--muted-foreground)" }}>
+            <span className="capitalize">{session.interview_style} interview</span>
+            {currentQuestion && <span>Question {currentQuestion.index} of {currentQuestion.total}</span>}
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+              style={{
+                backgroundColor: ws.phase === "question" || ws.phase === "listening" ? "rgba(239,68,68,0.1)" : "rgba(156,163,175,0.1)",
+                color: ws.phase === "question" || ws.phase === "listening" ? "rgb(239,68,68)" : "var(--muted-foreground)",
+              }}
+            >
+              {ws.phase === "question" || ws.phase === "listening" ? (
+                <><span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE</>
+              ) : ws.phase}
+            </span>
+            {stt.mode !== "none" && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-50 text-blue-600">
+                {stt.mode === "webspeech" ? "Web Speech" : "Whisper"}
+              </span>
+            )}
+            <span
+              className="h-2 w-2 rounded-full"
+              title={audio.healthState.kokoroAvailable ? "Kokoro TTS OK" : "Browser TTS fallback"}
+              style={{
+                backgroundColor: audio.healthState.kokoroAvailable ? "rgb(16,185,129)"
+                  : audio.healthState.isRecovering ? "rgb(234,179,8)" : "rgb(239,68,68)",
+              }}
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleHandsFree}
+            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-medium transition-colors ${
+              handsFree ? "bg-emerald-50 text-emerald-700 border-emerald-200" : ""
+            }`}
+            style={{ borderColor: handsFree ? undefined : "var(--border)" }}
+          >
+            {handsFree ? "Hands-Free" : "Manual"}
+          </button>
+          <button
+            onClick={endSession}
+            className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <Square className="h-3 w-3" /> End Interview
+          </button>
+        </div>
+      </div>
+
+      {/* Progress + audio level */}
+      <div className="flex gap-2 items-center">
+        <div className="flex-1 h-1.5 rounded-full" style={{ backgroundColor: "var(--accent)" }}>
+          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: "var(--primary)" }} />
+        </div>
+        <div className="flex gap-0.5 items-end h-4" title={`Audio: ${vad.audioLevel.toFixed(0)} dB`}>
+          {[20, 40, 60, 80, 100].map((threshold) => (
+            <div
+              key={threshold}
+              className="w-1 rounded-full transition-all duration-100"
+              style={{
+                height: `${threshold / 100 * 16}px`,
+                backgroundColor: audioLevelPct >= threshold
+                  ? vad.isSpeaking ? "rgb(16,185,129)" : "rgb(59,130,246)"
+                  : "var(--border)",
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {turnTaking.currentSpeaker !== "none" && (
+        <div className="text-center text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>
+          {turnTaking.currentSpeaker === "interviewer" ? "Interviewer speaking..." : "Your turn"}
+        </div>
+      )}
+
+      {/* Transcript */}
+      <div
+        className="rounded-xl border p-4 h-[400px] overflow-y-auto space-y-3"
+        style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+      >
+        {transcriptLog.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            {ws.phase === "connecting" || ws.phase === "connected" ? (
+              <div className="w-full max-w-xs space-y-3">
+                <div className="text-sm font-medium text-center mb-4" style={{ color: "var(--foreground)" }}>
+                  Preparing Interview
+                </div>
+                {[
+                  { label: "WebSocket", ok: ws.phase !== "connecting", detail: ws.phase === "connecting" ? "Connecting..." : "Connected" },
+                  { label: "Questions", ok: ws.totalQuestions > 0, detail: ws.totalQuestions > 0 ? `${ws.totalQuestions} ready` : "Waiting..." },
+                  { label: "Kokoro TTS", ok: audio.healthState.kokoroAvailable, detail: audio.healthState.kokoroAvailable ? "Available" : audio.healthState.isRecovering ? "Recovering..." : "Using browser fallback" },
+                  { label: "Speech-to-Text", ok: stt.mode !== "none", detail: stt.mode === "webspeech" ? "Web Speech API" : stt.mode === "whisper" ? "Whisper STT" : "Initializing..." },
+                  { label: "Voice Activity", ok: vad.isActive, detail: vad.isActive ? "Listening" : "Starting..." },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: "var(--accent)" }}>
+                    <div className="flex items-center gap-2">
+                      {item.ok ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: "var(--muted-foreground)" }} />
+                      )}
+                      <span className="font-medium">{item.label}</span>
+                    </div>
+                    <span style={{ color: "var(--muted-foreground)" }}>{item.detail}</span>
+                  </div>
+                ))}
+                <p className="text-[10px] text-center mt-2" style={{ color: "var(--muted-foreground)" }}>
+                  First question TTS may take a moment to synthesize...
+                </p>
+              </div>
+            ) : (
+              <div className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                Waiting for the interview to begin...
+              </div>
+            )}
+          </div>
+        )}
+        {transcriptLog.map((entry, i) => (
+          <div key={i} className={`flex gap-3 ${entry.role === "interviewer" ? "" : "justify-end"}`}>
+            <div
+              className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm ${entry.role === "interviewer" ? "rounded-tl-sm" : "rounded-tr-sm"}`}
+              style={{ backgroundColor: entry.role === "interviewer" ? "var(--accent)" : "rgba(59,130,246,0.1)" }}
+            >
+              <div className="text-[10px] font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>
+                {entry.role === "interviewer" ? "Interviewer" : "You"}
+              </div>
+              {entry.text}
+            </div>
+          </div>
+        ))}
+        {interimText && (
+          <div className="flex gap-3 justify-end">
+            <div className="max-w-[80%] rounded-xl rounded-tr-sm px-4 py-2.5 text-sm italic opacity-60" style={{ backgroundColor: "rgba(59,130,246,0.05)" }}>
+              {interimText}...
+            </div>
+          </div>
+        )}
+        {nudge && (
+          <div className="flex gap-3">
+            <div className="max-w-[80%] rounded-xl px-4 py-2.5 text-sm border" style={{ backgroundColor: "rgba(234,179,8,0.05)", borderColor: "rgba(234,179,8,0.3)" }}>
+              <div className="text-[10px] font-medium mb-1 text-yellow-600">Nudge</div>
+              {nudge}
+            </div>
+          </div>
+        )}
+        {textFallback && (
+          <div className="flex gap-3">
+            <div className="max-w-[80%] rounded-xl px-4 py-2.5 text-sm border italic" style={{ backgroundColor: "var(--accent)", borderColor: "var(--border)" }}>
+              <div className="text-[10px] font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Interviewer (text fallback)</div>
+              {textFallback}
+            </div>
+          </div>
+        )}
+        <div ref={transcriptEndRef} />
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center justify-center gap-4">
+        {!sttAvailable && (
+          <div className="text-xs text-red-500 flex items-center gap-1">
+            <AlertCircle className="h-3 w-3" />
+            No speech recognition available. Use Chrome/Edge, or ensure Whisper STT service is running.
+          </div>
+        )}
+        {sttAvailable && !handsFree && (
+          <>
+            {!isResponding ? (
+              <button
+                onClick={startResponding}
+                disabled={ws.phase !== "question" || director.isPlaying}
+                className="flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-all disabled:opacity-50"
+                style={{ backgroundColor: "rgb(16,185,129)" }}
+              >
+                <Mic className="h-5 w-5" /> Start Speaking
+              </button>
+            ) : (
+              <button
+                onClick={finishResponding}
+                className="flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-all animate-pulse"
+                style={{ backgroundColor: "rgb(239,68,68)" }}
+              >
+                <MicOff className="h-5 w-5" /> Done Speaking
+              </button>
+            )}
+            <button
+              onClick={skipQuestion}
+              disabled={ws.phase !== "question"}
+              className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors hover:bg-accent disabled:opacity-50"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <SkipForward className="h-3.5 w-3.5" /> Skip
+            </button>
+          </>
+        )}
+        {sttAvailable && handsFree && (
+          <div className="flex items-center gap-3 text-xs" style={{ color: "var(--muted-foreground)" }}>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              Hands-free mode — speak naturally after each question
+            </span>
+            <button
+              onClick={skipQuestion}
+              disabled={ws.phase !== "question"}
+              className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors hover:bg-accent disabled:opacity-50"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <SkipForward className="h-3.5 w-3.5" /> Skip
+            </button>
+          </div>
+        )}
+      </div>
+
+      {echo.echoState.isSpeaking && (
+        <div className="text-center text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+          Echo guard active — mic input filtered while TTS plays
+        </div>
+      )}
+
+      {ws.phase === "generating_debrief" && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="rounded-2xl p-8 text-center space-y-4" style={{ backgroundColor: "var(--card)" }}>
+            <Loader2 className="h-8 w-8 animate-spin mx-auto" style={{ color: "var(--primary)" }} />
+            <h3 className="text-lg font-bold">Generating your debrief...</h3>
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              Analyzing your communication patterns and scoring responses
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ============================================================================
+// SIMULATOR RADAR CHART
+// ============================================================================
+
+function SimRadarChart({ scores, size = 240 }: { scores: { label: string; value: number }[]; size?: number }) {
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = size * 0.38;
+  const angleStep = (2 * Math.PI) / scores.length;
+  const startAngle = -Math.PI / 2;
+  const rings = [0.25, 0.5, 0.75, 1.0];
+  const getPoint = (index: number, scale: number) => {
+    const angle = startAngle + index * angleStep;
+    return { x: cx + radius * scale * Math.cos(angle), y: cy + radius * scale * Math.sin(angle) };
+  };
+  const dataPoints = scores.map((s, i) => getPoint(i, (s.value ?? 0) / 100));
+  const dataPath = dataPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ") + " Z";
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="mx-auto">
+      {rings.map((r) => {
+        const rp = scores.map((_, i) => getPoint(i, r));
+        const rPath = rp.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ") + " Z";
+        return <path key={r} d={rPath} fill="none" stroke="var(--border)" strokeWidth="0.5" opacity={0.6} />;
+      })}
+      {scores.map((_, i) => { const p = getPoint(i, 1); return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="var(--border)" strokeWidth="0.5" opacity={0.4} />; })}
+      <path d={dataPath} fill="rgba(168,85,247,0.15)" stroke="rgb(168,85,247)" strokeWidth="2" />
+      {dataPoints.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="3.5" fill="rgb(168,85,247)" />)}
+      {scores.map((s, i) => {
+        const lp = getPoint(i, 1.22);
+        const angle = startAngle + i * angleStep;
+        const textAnchor = Math.abs(Math.cos(angle)) < 0.1 ? "middle" : Math.cos(angle) > 0 ? "start" : "end";
+        return <text key={i} x={lp.x} y={lp.y} textAnchor={textAnchor} dominantBaseline="middle" fontSize="10" fill="var(--foreground)" fontWeight="500">{s.label} ({s.value ?? 0})</text>;
+      })}
+    </svg>
+  );
+}
+
+
+// ============================================================================
+// SIMULATOR DEBRIEF VIEW (INSIDE MODAL)
+// ============================================================================
+
+function SimDebriefView({ session, onClose }: { session: SimSessionDetail; onClose: () => void }) {
+  const debrief = session.debrief;
+  const [expandedQ, setExpandedQ] = useState<Set<number>>(new Set());
+  const toggleQ = (idx: number) => setExpandedQ((prev) => { const next = new Set(prev); if (next.has(idx)) next.delete(idx); else next.add(idx); return next; });
+
+  const scoreColor = (score: number | null) => {
+    if (score === null) return "var(--muted-foreground)";
+    if (score >= 80) return "rgb(16,185,129)";
+    if (score >= 60) return "rgb(234,179,8)";
+    return "rgb(239,68,68)";
+  };
+
+  const ScoreBar = ({ label, score }: { label: string; score: number | null }) => (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span>{label}</span>
+        <span className="font-bold" style={{ color: scoreColor(score) }}>{score ?? "—"}</span>
+      </div>
+      <div className="h-2 w-full rounded-full" style={{ backgroundColor: "var(--accent)" }}>
+        <div className="h-full rounded-full transition-all" style={{ width: `${score ?? 0}%`, backgroundColor: scoreColor(score) }} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Interview Debrief</h2>
+          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+            {session.job_title} at {session.company} &middot; {session.interview_style}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1 text-xs text-emerald-600">
+            <CheckCircle2 className="h-3 w-3" /> Auto-exported to workspace
+          </span>
+          {debrief && (
+            <div className="text-center">
+              <div className="text-4xl font-bold" style={{ color: scoreColor(debrief.overall_score) }}>{debrief.overall_score}</div>
+              <div className="text-xs" style={{ color: "var(--muted-foreground)" }}>Overall Score</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {debrief && (
+        <>
+          {/* Radar chart + Score breakdown */}
+          <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+            <h3 className="text-sm font-bold flex items-center gap-2 mb-4"><BarChart3 className="h-4 w-4" /> Communication Scores</h3>
+            <div className="grid grid-cols-[auto_1fr] gap-6 items-center">
+              <SimRadarChart
+                scores={[
+                  { label: "Clarity", value: debrief.clarity_score ?? 0 },
+                  { label: "Specificity", value: debrief.specificity_score ?? 0 },
+                  { label: "Confidence", value: debrief.confidence_score ?? 0 },
+                  { label: "Structure", value: debrief.structure_score ?? 0 },
+                  { label: "Conciseness", value: debrief.conciseness_score ?? 0 },
+                ]}
+              />
+              <div className="space-y-3">
+                <ScoreBar label="Clarity" score={debrief.clarity_score} />
+                <ScoreBar label="Specificity" score={debrief.specificity_score} />
+                <ScoreBar label="Confidence" score={debrief.confidence_score} />
+                <ScoreBar label="Structure" score={debrief.structure_score} />
+                <ScoreBar label="Conciseness" score={debrief.conciseness_score} />
+              </div>
+            </div>
+          </div>
+
+          {/* Qualitative sections */}
+          <div className="grid grid-cols-2 gap-4">
+            {debrief.what_landed && (
+              <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-emerald-600"><CheckCircle2 className="h-4 w-4" /> What Landed</h3>
+                <div className="text-sm prose prose-sm max-w-none" style={{ color: "var(--foreground)" }}>
+                  {debrief.what_landed.split("\n").map((line, i) => <p key={i}>{line}</p>)}
+                </div>
+              </div>
+            )}
+            {debrief.what_missed && (
+              <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-amber-600"><AlertCircle className="h-4 w-4" /> What Missed</h3>
+                <div className="text-sm prose prose-sm max-w-none" style={{ color: "var(--foreground)" }}>
+                  {debrief.what_missed.split("\n").map((line, i) => <p key={i}>{line}</p>)}
+                </div>
+              </div>
+            )}
+            {debrief.portfolio_gaps && (
+              <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-blue-600"><Target className="h-4 w-4" /> Portfolio Gaps</h3>
+                <div className="text-sm prose prose-sm max-w-none" style={{ color: "var(--foreground)" }}>
+                  {debrief.portfolio_gaps.split("\n").map((line, i) => <p key={i}>{line}</p>)}
+                </div>
+              </div>
+            )}
+            {debrief.improvement_plan && (
+              <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: "var(--primary)" }}><Sparkles className="h-4 w-4" /> Improvement Plan</h3>
+                <div className="text-sm prose prose-sm max-w-none" style={{ color: "var(--foreground)" }}>
+                  {debrief.improvement_plan.split("\n").map((line, i) => <p key={i}>{line}</p>)}
+                </div>
+              </div>
+            )}
+            {(debrief as any).story_utilization && (
+              <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-purple-600"><Sparkles className="h-4 w-4" /> Story Utilization</h3>
+                <div className="text-sm prose prose-sm max-w-none" style={{ color: "var(--foreground)" }}>
+                  {((debrief as any).story_utilization as string).split("\n").map((line: string, i: number) => <p key={i}>{line}</p>)}
+                </div>
+              </div>
+            )}
+            {(debrief as any).gap_correlation && (
+              <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                <h3 className="text-sm font-bold mb-3 flex items-center gap-2 text-rose-600"><Target className="h-4 w-4" /> Gap Correlation</h3>
+                <div className="text-sm prose prose-sm max-w-none" style={{ color: "var(--foreground)" }}>
+                  {((debrief as any).gap_correlation as string).split("\n").map((line: string, i: number) => <p key={i}>{line}</p>)}
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Per-question breakdown */}
+      {session.questions.length > 0 && (
+        <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+          <h3 className="text-sm font-bold mb-3">Per-Question Breakdown</h3>
+          <div className="space-y-2">
+            {session.questions.map((q) => {
+              const resp = q.response;
+              const isOpen = expandedQ.has(q.question_index);
+              return (
+                <div key={q.id} className="border rounded-lg" style={{ borderColor: "var(--border)" }}>
+                  <button
+                    onClick={() => toggleQ(q.question_index)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-sm hover:bg-accent/50"
+                  >
+                    <span className="shrink-0 text-xs font-mono w-6" style={{ color: "var(--muted-foreground)" }}>Q{q.question_index}</span>
+                    <span className="flex-1 truncate">{q.question_text}</span>
+                    {resp && resp.clarity_score !== null && (
+                      <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded" style={{
+                        color: scoreColor(Math.round(((resp.clarity_score || 0) + (resp.specificity_score || 0) + (resp.confidence_score || 0) + (resp.structure_score || 0)) / 4 * 100)),
+                      }}>
+                        {Math.round(((resp.clarity_score || 0) + (resp.specificity_score || 0) + (resp.confidence_score || 0) + (resp.structure_score || 0)) / 4 * 100)}
+                      </span>
+                    )}
+                    {!resp && <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>skipped</span>}
+                    <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`} style={{ color: "var(--muted-foreground)" }} />
+                  </button>
+                  {isOpen && resp && (
+                    <div className="px-4 pb-4 space-y-3 border-t" style={{ borderColor: "var(--border)" }}>
+                      <div className="pt-3">
+                        <div className="text-xs font-medium mb-1" style={{ color: "var(--muted-foreground)" }}>Your Response:</div>
+                        <p className="text-sm">{resp.transcript}</p>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 text-center">
+                        {[
+                          { label: "Clarity", score: resp.clarity_score },
+                          { label: "Specificity", score: resp.specificity_score },
+                          { label: "Confidence", score: resp.confidence_score },
+                          { label: "Structure", score: resp.structure_score },
+                        ].map(({ label, score }) => (
+                          <div key={label}>
+                            <div className="text-lg font-bold" style={{ color: scoreColor(score ? Math.round(score * 100) : null) }}>
+                              {score ? Math.round(score * 100) : "—"}
+                            </div>
+                            <div className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {resp.evaluator_notes && (
+                        <div className="text-xs rounded-lg p-3" style={{ backgroundColor: "var(--accent)" }}>
+                          <span className="font-medium">Feedback:</span> {resp.evaluator_notes}
+                        </div>
+                      )}
+                      <div className="flex gap-4 text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+                        <span>Fillers: {resp.filler_word_count}</span>
+                        <span>Pace: {resp.pace_wpm || "?"} wpm</span>
+                        <span>Examples: {resp.example_quality || "?"}</span>
+                        {resp.was_nudged && <span className="text-amber-500">Was nudged</span>}
+                        {resp.stalled && <span className="text-red-500">Stalled</span>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          onClick={onClose}
+          className="rounded-lg px-6 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
+          style={{ border: "1px solid var(--border)" }}
+        >
+          Close
+        </button>
+      </div>
     </div>
   );
 }

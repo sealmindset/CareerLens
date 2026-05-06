@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: careerlens-config
+  namespace: careerlens
+  labels:
+    part-of: careerlens
+data:
+  # -- Shared across all services --
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "info"
+
+  # -- Backend / Simulator database --
+  DATABASE_HOST: "careerlens-prod-postgres.postgres.database.azure.com"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "careerlens"
+
+  # -- Frontend --
+  NEXT_PUBLIC_API_BASE_URL: "https://careerlens.example.com/api"
+  NEXT_PUBLIC_SIM_WS_URL: "wss://careerlens.example.com/api/sim/ws"
+
+  # -- Interview Simulator --
+  KOKORO_TTS_URL: "http://kokoro-tts:8880"
+  WHISPER_STT_URL: "http://whisper-stt:8000"
+  FRONTEND_URL: "https://careerlens.example.com"
+  MAX_CONCURRENT_SESSIONS: "5"
+  MAX_QUESTIONS_PER_SESSION: "20"
+
+  # -- AI provider (Ollama in-cluster or external) --
+  AI_PROVIDER: "anthropic"
+  OLLAMA_BASE_URL: "http://ollama:11434"

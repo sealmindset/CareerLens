@@ -32,6 +32,7 @@ services:
         condition: service_healthy
     environment:
       - BACKEND_INTERNAL_URL=http://backend:8000
+      - NEXT_PUBLIC_SIM_WS_URL=ws://localhost:8400
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/"]
       interval: 10s
@@ -196,6 +197,92 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - app-network
+
+  # --------------------------------------------------------------------------
+  # Interview Simulator (Voice Interview Practice)
+  # --------------------------------------------------------------------------
+  interview-simulator:
+    build:
+      context: ./interview-simulator
+      dockerfile: Dockerfile
+    ports:
+      - "8400:8000"
+    profiles:
+      - dev
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://career-lens:career-lens@db:5432/career-lens
+      - CAREERLENS_BACKEND_URL=http://backend:8000
+      - KOKORO_TTS_URL=http://kokoro-tts:8880
+      - KOKORO_TTS_ENABLED=${KOKORO_TTS_ENABLED:-true}
+      - AI_PROVIDER=${INTERVIEW_SIM_AI_PROVIDER:-ollama}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${INTERVIEW_SIM_OLLAMA_MODEL:-gemma4:26b}
+      - OLLAMA_AUTO_PULL=${OLLAMA_AUTO_PULL:-true}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL_STANDARD=${ANTHROPIC_MODEL_STANDARD:-claude-sonnet-4-5}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL_STANDARD=${OPENAI_MODEL_STANDARD:-gpt-4o-mini}
+      - JWT_SECRET=${JWT_SECRET}
+      - WHISPER_STT_URL=http://whisper-stt:8000
+      - WHISPER_STT_ENABLED=${WHISPER_STT_ENABLED:-true}
+      - FRONTEND_URL=http://localhost:3300
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app-network
+
+  # --------------------------------------------------------------------------
+  # Kokoro TTS (Local Text-to-Speech -- Kokoro-82M, OpenAI-compatible API)
+  # --------------------------------------------------------------------------
+  kokoro-tts:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.1
+    ports:
+      - "8401:8880"
+    profiles:
+      - dev
+    environment:
+      - KOKORO_PORT=8880
+      - KOKORO_DEFAULT_VOICE=af_bella
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8880/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - app-network
+
+  # --------------------------------------------------------------------------
+  # Faster-Whisper STT (Local Speech-to-Text fallback for non-Chrome browsers)
+  # --------------------------------------------------------------------------
+  whisper-stt:
+    image: fedirz/faster-whisper-server:latest-cpu
+    ports:
+      - "8402:8000"
+    profiles:
+      - dev
+    environment:
+      - WHISPER__MODEL=Systran/faster-whisper-large-v3
+      - WHISPER__INFERENCE_DEVICE=cpu
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/models')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
     networks:
       - app-network
 
