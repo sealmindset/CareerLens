@@ -440,6 +440,7 @@ export default function AgentsPage() {
   const [simStyle, setSimStyle] = useState("behavioral");
   const [simQuestionCount, setSimQuestionCount] = useState(10);
   const [simInterviewerContext, setSimInterviewerContext] = useState("");
+  const [simStories, setSimStories] = useState<Array<Record<string, unknown>>>([]);
 
   // Job creation state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -1189,15 +1190,30 @@ export default function AgentsPage() {
       }
     }
 
+    // Use curated Story Bank entries; fall back to Interview Prep Coach STAR drafts
+    let storySummaries: unknown = null;
+    if (simStories.length > 0) {
+      storySummaries = simStories;
+    } else {
+      const starDrafts = latestContent("interview_star_drafts");
+      if (starDrafts) {
+        try {
+          storySummaries = typeof starDrafts === "string" ? JSON.parse(starDrafts) : starDrafts;
+        } catch {
+          storySummaries = starDrafts;
+        }
+      }
+    }
+
     return {
       skill_gaps: skillGaps,
       hiring_manager_review: latestContent("hiring_manager_review"),
       interview_prep_brief: latestContent("interview_prep_brief"),
-      story_bank_summaries: null,
+      story_bank_summaries: storySummaries,
       candidate_seniority: null,
       interview_stage: applications.find((a) => a.id === selectedAppId)?.pipeline_stage || null,
     };
-  }, [workspace, applications, selectedAppId]);
+  }, [workspace, applications, selectedAppId, simStories]);
 
   const loadSimSessions = useCallback(async () => {
     if (!selectedAppId) return;
@@ -1221,6 +1237,24 @@ export default function AgentsPage() {
     setSimActiveSession(null);
     setSimError(null);
     setSimInterviewerContext("");
+
+    // Fetch curated Story Bank entries for debrief story suggestions
+    try {
+      const stories = await apiGet<Array<Record<string, unknown>>>("/stories");
+      const summaries = stories
+        .filter((s) => s.status === "curated" || s.status === "draft")
+        .map((s) => ({
+          title: s.story_title,
+          hook: s.hook_line,
+          keywords: s.trigger_keywords,
+          problem: s.problem,
+          proof_metric: s.proof_metric,
+        }));
+      setSimStories(summaries);
+    } catch {
+      setSimStories([]);
+    }
+
     await loadSimSessions();
   };
 
@@ -4350,11 +4384,9 @@ function SimLiveInterview({
         await director.speak(q.text);
       }
       turnTaking.setInterviewerSpeaking(false);
-      if (handsFree) {
-        echo.setRecordingStartTime(Date.now());
-        stt.start();
-        setIsResponding(true);
-      }
+      echo.setRecordingStartTime(Date.now());
+      stt.start();
+      setIsResponding(true);
     },
     onNudge: async (n) => {
       setNudge(n.text);
@@ -4562,24 +4594,24 @@ function SimLiveInterview({
             No speech recognition available. Use Chrome/Edge, or ensure Whisper STT service is running.
           </div>
         )}
-        {sttAvailable && !handsFree && (
+        {sttAvailable && (
           <>
-            {!isResponding ? (
-              <button
-                onClick={startResponding}
-                disabled={ws.phase !== "question" || director.isPlaying}
-                className="flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-all disabled:opacity-50"
-                style={{ backgroundColor: "rgb(16,185,129)" }}
-              >
-                <Mic className="h-5 w-5" /> Start Speaking
-              </button>
-            ) : (
+            {isResponding ? (
               <button
                 onClick={finishResponding}
                 className="flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-all animate-pulse"
                 style={{ backgroundColor: "rgb(239,68,68)" }}
               >
                 <MicOff className="h-5 w-5" /> Done Speaking
+              </button>
+            ) : (
+              <button
+                onClick={startResponding}
+                disabled={ws.phase !== "question" || director.isPlaying}
+                className="flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-all disabled:opacity-50"
+                style={{ backgroundColor: "rgb(16,185,129)" }}
+              >
+                <Mic className="h-5 w-5" /> Resume Mic
               </button>
             )}
             <button
@@ -4591,22 +4623,6 @@ function SimLiveInterview({
               <SkipForward className="h-3.5 w-3.5" /> Skip
             </button>
           </>
-        )}
-        {sttAvailable && handsFree && (
-          <div className="flex items-center gap-3 text-xs" style={{ color: "var(--muted-foreground)" }}>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Hands-free mode — speak naturally after each question
-            </span>
-            <button
-              onClick={skipQuestion}
-              disabled={ws.phase !== "question"}
-              className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors hover:bg-accent disabled:opacity-50"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <SkipForward className="h-3.5 w-3.5" /> Skip
-            </button>
-          </div>
         )}
       </div>
 
