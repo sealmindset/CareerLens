@@ -38,6 +38,7 @@ AGENT_SLUGS = {
     "interview_verdict": "interview-verdict-system",
     "overqualification_shield": "overqualification-shield-system",
     "interview_prep_coach": "interview-prep-coach-chat",
+    "translation_coach": "translation-coach-system",
 }
 
 # Default system prompts (fallback when DB has no published prompt)
@@ -349,6 +350,61 @@ DEFAULT_PROMPTS = {
         "- Use verbs: architected, optimized, translated, collaborated, bridged, orchestrated\n"
         "- Quantify results. Structure: deep expertise -> broad application -> business impact\n\n"
         "RULES: NEVER fabricate. Ask clarifying questions. 3-5 bullet points. Use markdown."
+    ),
+    "translation_coach": (
+        "You are Translation Coach, a communication specialist for CareerLens.\n\n"
+        "Your job is to evaluate an interview answer for 'business translation' — "
+        "whether the speaker converts technical jargon into business-value language "
+        "and positions themselves as a strategic leader rather than a tactical executor.\n\n"
+        "## SCORING DIMENSIONS (weighted booleans)\n\n"
+        "Evaluate EACH dimension as true/false:\n"
+        "- led_with_problem (0.25): Did the answer open with a business problem or context, "
+        "rather than jumping to a technical solution or tool?\n"
+        "- business_outcome_present (0.25): Does the answer mention at least one business outcome "
+        "(cost savings, time reduction, risk mitigation, revenue)?\n"
+        "- jargon_translated (0.20): Are technical terms accompanied by plain-English equivalents "
+        "or business-framed explanations?\n"
+        "- used_employers_language (0.15): Does the answer mirror terminology from the job "
+        "description (if provided)? If no JD provided, mark true.\n"
+        "- quantified_impact (0.15): Does the answer include a concrete number, percentage, "
+        "or comparison?\n\n"
+        "## FLAGGED PHRASES\n\n"
+        "Identify 0-5 jargon phrases in the original answer. For each, provide:\n"
+        "- The exact phrase as written (case-sensitive, verbatim)\n"
+        "- A business-language replacement suggestion\n"
+        "- Character start and end indices in the original text\n\n"
+        "## TRANSLATED VERSION\n\n"
+        "Rewrite the entire answer in business-value language. Preserve the candidate's intent "
+        "and facts. Write in first person, in the candidate's voice — not as a template with "
+        "brackets. Lead with the problem. Quantify outcomes. Remove jargon. "
+        "Position the speaker as a strategic leader who saw the landscape, made a judgment call, "
+        "and drove a business outcome — not an executor who was assigned a task and completed it.\n\n"
+        "## COACHING NOTE\n\n"
+        "Write exactly 4-5 sentences of actionable coaching. Be specific, not generic.\n"
+        "- Sentence 1: Address the strongest aspect of the answer — what landed well.\n"
+        "- Sentence 2: Identify the most impactful improvement — where the answer drifted "
+        "into technical execution or lost the business thread.\n"
+        "- Sentence 3: Evaluate strategic framing — does this answer position the speaker "
+        "as a strategic leader who shapes outcomes, or a capable executor who completes tasks? "
+        "If executor, suggest how to reframe with strategic intent (e.g., 'I recognized that...' "
+        "or 'I resequenced the roadmap because...' instead of 'I was asked to...' or 'I fixed...').\n"
+        "- Sentence 4: Lede position — did the answer front-load the conclusion/impact in the "
+        "first 1-2 sentences, or was it buried after technical explanation? If the business "
+        "outcome or punchline appears only in the last quarter of the answer, call it out: "
+        "'You buried the lede — your impact statement should be your OPENING, not your closing.'\n"
+        "- Sentence 5 (if applicable): Conciseness — if the answer is verbose or over-explains "
+        "technical details, note it. A crisp 60-second answer that hits the key points is stronger "
+        "than a 3-minute answer that wanders through implementation details before reaching the point. "
+        "If the answer is already concise, skip this sentence.\n\n"
+        "## OUTPUT FORMAT\n\n"
+        "Return EXACTLY ONE JSON object. No markdown fences. No preamble. No explanation.\n"
+        '{"led_with_problem": true/false, "business_outcome_present": true/false, '
+        '"jargon_translated": true/false, "used_employers_language": true/false, '
+        '"quantified_impact": true/false, '
+        '"flagged_phrases": [{"original": "...", "suggested": "...", "start_idx": 0, "end_idx": 10}], '
+        '"translated_version": "...", "coaching_note": "..."}\n\n'
+        "CRITICAL: Never invent facts. Only work with what the user provided. "
+        "Be specific in flagged_phrases — identify exact quoted phrases, not paraphrases."
     ),
 }
 
@@ -873,6 +929,57 @@ async def generate_propagation_suggestions(
     except Exception as e:
         logger.error("Propagation suggestion generation failed: %s", e)
         return {"bullet": original_bullet, "description": original_description or ""}
+
+
+async def score_translation_attempt(
+    db: AsyncSession,
+    question_text: str,
+    original_answer: str,
+    job_description: str | None = None,
+) -> dict:
+    """Single-shot scoring of a translation attempt. Returns parsed JSON."""
+    slug = AGENT_SLUGS["translation_coach"]
+    fallback = DEFAULT_PROMPTS["translation_coach"]
+    system_prompt = await get_prompt(db, slug, fallback)
+
+    sanitized_answer = sanitize_prompt_input(original_answer)
+
+    user_prompt_parts = [
+        f"Interview question: {question_text}\n",
+        f"Candidate's answer:\n{sanitized_answer}\n",
+    ]
+    if job_description:
+        user_prompt_parts.append(
+            f"\nJob description (use this for the used_employers_language dimension):\n"
+            f"{job_description[:3000]}\n"
+        )
+
+    user_prompt = "\n".join(user_prompt_parts)
+
+    provider = get_ai_provider()
+    temperature, max_tokens, model_tier = await get_prompt_config(db, slug)
+    model = get_model_for_tier(model_tier or "standard")
+
+    raw = await provider.complete(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        model=model,
+        temperature=temperature or 0.3,
+        max_tokens=max_tokens or 2048,
+    )
+
+    validated = validate_agent_output(raw)
+
+    # Strip markdown fences if present
+    cleaned = validated.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+    if cleaned.endswith("```"):
+        cleaned = cleaned.rsplit("```", 1)[0]
+    cleaned = cleaned.strip()
+
+    import json
+    return json.loads(cleaned)
 
 
 async def generate_agent_response(

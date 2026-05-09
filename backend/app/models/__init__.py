@@ -16,6 +16,11 @@ from app.models.task import Task
 from app.models.quick_capture import QuickCapture
 from app.models.interview_question import InterviewQuestion
 from app.models.interview_journal import InterviewJournalEntry
+from app.models.translation_coach import (
+    TranslationAttempt,
+    TranslationQuestion,
+    TranslationSession,
+)
 
 __all__ = [
     "Base", "User", "Role", "Permission", "RolePermission",
@@ -31,4 +36,5 @@ __all__ = [
     "Task", "QuickCapture",
     "InterviewQuestion",
     "InterviewJournalEntry",
+    "TranslationQuestion", "TranslationSession", "TranslationAttempt",
 ]

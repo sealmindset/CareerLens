@@ -100,9 +100,11 @@ async def generate_debrief(db: AsyncSession, session_id) -> InterviewSimDebrief:
         story_lines = []
         for s in (stories if isinstance(stories, list) else [])[:15]:
             title = s.get("story_title", s.get("title", "Untitled"))
-            hook = s.get("hook_line", "")
-            keywords = ", ".join(s.get("trigger_keywords", [])[:5])
-            story_lines.append(f"- {title}: {hook} (keywords: {keywords})")
+            hook = s.get("hook_line", s.get("hook", ""))
+            kw = s.get("trigger_keywords", s.get("keywords", []))
+            keywords = ", ".join(kw[:5]) if isinstance(kw, list) else str(kw)
+            problem = s.get("problem", "")
+            story_lines.append(f"- {title}: {hook} (keywords: {keywords}){f' — {problem[:120]}' if problem else ''}")
         if story_lines:
             context_block += f"\nCandidate's Prepared STAR Stories:\n" + "\n".join(story_lines) + "\n"
 
@@ -116,7 +118,7 @@ async def generate_debrief(db: AsyncSession, session_id) -> InterviewSimDebrief:
 
     extra_sections = ""
     if has_stories:
-        extra_sections += "\n5. **Story Utilization** — which prepared stories the candidate referenced vs. missed opportunities to cite specific experiences"
+        extra_sections += "\n5. **Story Utilization** — For each question where the candidate missed an opportunity to use a prepared story, suggest the best matching story from the list above. Format: question summary → recommended story title + why it fits. Also note any stories that were effectively referenced."
     if has_gaps:
         extra_sections += "\n6. **Gap Correlation** — map weak answers to the candidate's known skill gaps with actionable advice"
 

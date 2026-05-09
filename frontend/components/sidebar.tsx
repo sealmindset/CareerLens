@@ -20,6 +20,7 @@ import {
   BarChart3,
   ShieldCheck,
   FlaskConical,
+  Languages,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -67,6 +68,12 @@ const mainNavItems: NavItem[] = [
     href: "/interview-questions",
     icon: MessageCircleQuestion,
     permission: { resource: "interview_questions", action: "view" },
+  },
+  {
+    label: "Translation Coach",
+    href: "/translation-coach",
+    icon: Languages,
+    permission: { resource: "translation_coach", action: "use" },
   },
   {
     label: "Analytics",

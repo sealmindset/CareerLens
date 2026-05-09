@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     RAG_CHUNK_OVERLAP: int = 50
     RAG_TOP_K: int = 10
 
+    # Kokoro TTS (shared with interview-simulator)
+    KOKORO_TTS_URL: str = "http://kokoro-tts:8880"
+
     # Mock services
     MOCK_OLIVIA_URL: str = "http://mock-olivia:10091"
 

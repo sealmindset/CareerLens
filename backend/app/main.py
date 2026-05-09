@@ -11,6 +11,8 @@ from app.routers import profile, jobs, applications, agents, dashboard
 from app.routers import resume_variants, story_bank, notifications, events, resume_chat
 from app.routers import analytics, security_scan, ai_safety
 from app.routers import tasks, quick_captures, interview_questions, interview_journal
+from app.routers import translation_coach
+from app.routers import interview_practice
 from app.routers import internal
 from app.routers import settings as settings_router
 
@@ -111,6 +113,8 @@ app.include_router(tasks.router)
 app.include_router(quick_captures.router)
 app.include_router(interview_questions.router)
 app.include_router(interview_journal.router)
+app.include_router(translation_coach.router)
+app.include_router(interview_practice.router)
 app.include_router(analytics.router)
 app.include_router(security_scan.router)
 app.include_router(ai_safety.router)
